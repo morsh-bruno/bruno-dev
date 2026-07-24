@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import React, { useId } from 'react';
 import { Checkbox, Inner, Label, Switch, SwitchButton } from './StyledWrapper';
 
 const ToggleSwitch = ({ isOn, handleToggle, size = 'm', activeColor, ...props }) => {
