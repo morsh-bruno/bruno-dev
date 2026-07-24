@@ -5,7 +5,6 @@ import {
   IconBox,
   IconWorld,
   IconFolder,
-  IconBell,
   IconTag,
   IconHome,
   IconSettings,
@@ -112,7 +111,7 @@ export const Playground = {
         items={showEmpty ? [] : SAMPLE_MEMBERS}
         getKey={(_, index) => `member-${index}`}
         emptyState={{
-          icon: <LeadingIcon size={24} strokeWidth={1.2} />,
+          icon: LeadingIcon ? <LeadingIcon size={24} strokeWidth={1.2} /> : null,
           title: emptyTitle,
           text: emptyText
         }}
