@@ -1002,7 +1002,6 @@ export const collectionsSlice = createSlice({
 
       if (folder && folder.draft) {
         folder.root = folder.draft;
-        folder.tags = folder.root?.meta?.tags || [];
         folder.draft = null;
       }
     },
@@ -3067,7 +3066,6 @@ export const collectionsSlice = createSlice({
           if (file?.data?.meta?.seq) {
             folderItem.seq = file.data?.meta?.seq;
           }
-          folderItem.tags = file?.data?.meta?.tags || [];
         }
         return;
       }
@@ -3224,7 +3222,6 @@ export const collectionsSlice = createSlice({
           if (file?.data?.meta?.seq) {
             folderItem.seq = file?.data?.meta?.seq;
           }
-          folderItem.tags = file?.data?.meta?.tags || [];
           folderItem.root = mergeRootWithPreservedUids(folderItem.root, file.data);
         }
         return;

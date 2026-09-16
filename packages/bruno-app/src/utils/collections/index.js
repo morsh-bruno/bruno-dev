@@ -600,6 +600,9 @@ export const transformCollectionToSaveToExportAsFile = (collection, options = {}
           di.root.meta = {};
           di.root.meta.name = meta?.name;
           di.root.meta.seq = meta?.seq;
+          if (meta?.tags?.length) {
+            di.root.meta.tags = meta.tags;
+          }
         }
         if (!Object.keys(di.root.request)?.length) {
           delete di.root.request;
@@ -1648,7 +1651,7 @@ export const getUniqueTagsFromItems = (items = [], { includeDrafts = true } = {}
         tags.forEach((tag) => allTags.add(tag));
       }
       if (isItemAFolder(item)) {
-        const tags = includeDrafts ? getFolderTags(item) : get(item, 'tags', []);
+        const tags = includeDrafts ? getFolderTags(item) : get(item, 'root.meta.tags', []);
         tags.forEach((tag) => allTags.add(tag));
       }
       if (item.items) {
