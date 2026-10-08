@@ -22,13 +22,13 @@ import { uuid } from 'utils/common';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { BRUNO_VARIABLE_DATATYPES, valueToString } from '@usebruno/common/utils';
+import { getDuplicateSecretNames } from '@usebruno/common';
 import { variableNameRegex } from 'utils/common/regex';
 import toast from 'react-hot-toast';
 import { Tooltip } from 'react-tooltip';
 import { getAllVariables, getGlobalEnvironmentVariables, getGlobalEnvironmentVariablesMasked } from 'utils/collections';
 import {
   stripEnvVarUid,
-  getDuplicateSecretNames,
   DUPLICATE_SECRET_NAMES_ERROR,
   DUPLICATE_SECRET_NAME_FIELD_ERROR
 } from 'utils/environments';
