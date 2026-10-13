@@ -2,6 +2,7 @@ const ReadOnlyPropertyList = require('./readonly-property-list');
 const {
   headerEntriesToObject,
   liveHeaderEntries,
+  orderedHeaderEntries,
   projectHeaderEntries,
   snapshotHeaderEntries
 } = require('./utils/header-entries');
@@ -107,7 +108,7 @@ class HeaderList extends ReadOnlyPropertyList {
       // so `one(k).disabled = true` on the result cannot bypass the write methods.
       // Read-only: static snapshot of response headers.
       ...(writable
-        ? { dataSource: () => liveHeaderEntries(source).map((entry) => ({ ...entry })) }
+        ? { dataSource: () => orderedHeaderEntries(source) }
         : { items: snapshotHeaderEntries(source?.headers) })
     });
     this.#req = writable ? source : null;
@@ -220,8 +221,6 @@ class HeaderList extends ReadOnlyPropertyList {
     const existing = entries.find((entry) => this._keyMatches(entry.key, item.key));
 
     if (existing) {
-      // COMPAT: the entry is updated in place and keeps its position. Before the array store a
-      // re-cased key was deleted from `req.headers` and re-added, which moved it to the end.
       if (!existing.disabled && (existing.key !== item.key || disabled)) {
         // The old exact key is what axios would see when it adds defaults back.
         this.#trackDeleted(existing.key);

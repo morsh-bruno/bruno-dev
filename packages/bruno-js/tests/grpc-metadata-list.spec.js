@@ -151,11 +151,11 @@ describe('GrpcMetadataList', () => {
       return { list, metadata: request.headers, entries: request.headerEntries };
     }
 
-    test('appear in all() with disabled: true, in store order', () => {
+    test('appear in all() with disabled: true, ahead of the enabled ones', () => {
       const { list } = createWithDisabled();
       expect(list.all()).toEqual([
-        { key: 'X-Token', value: 'abc123' },
-        { key: 'x-off', value: 'hidden', disabled: true }
+        { key: 'x-off', value: 'hidden', disabled: true },
+        { key: 'X-Token', value: 'abc123' }
       ]);
       expect(list.one('X-OFF')).toEqual({ key: 'x-off', value: 'hidden', disabled: true });
     });
