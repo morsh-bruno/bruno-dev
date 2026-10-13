@@ -3,13 +3,13 @@
  *
  * The prepared request carries two views of its headers:
  *
- *   request.headerEntries  [{ key, value, disabled?: true }]  ordered store, what the lists read and write
+ *   request.headerEntries  [{ key, value, disabled?: true }]  store, what the lists read and write
  *   request.headers        { name: value }                    projection of the enabled entries
  *
  * The object is what transport reads (axios, the gRPC client, interpolation, auth helpers) and what
  * `req.headers` hands to scripts, so it has to stay a plain object with one identity for the whole
- * run. The array is the source of truth for the list API (order, disabled rows). These two helpers
- * keep them in step:
+ * run. The array is the source of truth for the list API's disabled rows; the order scripts see
+ * comes from `orderedHeaderEntries`. These two helpers keep them in step:
  *
  *   reconcileHeaderEntries  object → entries, run before every list read. Picks up writes the list
  *                           cannot see: `req.headers.x = 'y'`, `req.setHeader()`, auth headers and
@@ -93,6 +93,23 @@ const liveHeaderEntries = (request) => {
 };
 
 /**
+ * Copies of the live entries in the order the lists hand them to scripts: disabled entries first,
+ * then enabled entries in `headers` key order.
+ * COMPAT: the order the list had before the array store, when it was built from the disabled
+ * headers followed by `req.headers`.
+ * @param {object} request - The prepared request
+ * @returns {Array} copies, safe to hand out
+ */
+const orderedHeaderEntries = (request) => {
+  const entries = liveHeaderEntries(request);
+  const enabledByKey = new Map(entries.filter((entry) => !entry.disabled).map((entry) => [entry.key, entry]));
+  return [
+    ...entries.filter((entry) => entry.disabled),
+    ...Object.keys(request.headers).map((key) => enabledByKey.get(key))
+  ].map((entry) => ({ ...entry }));
+};
+
+/**
  * A static `[{ key, value }]` snapshot for the read-only lists (response headers, response metadata
  * and trailers). Accepts the `[{ name, value }]` display rows the response pane renders or a plain
  * `{ name: value }` map.
@@ -145,5 +162,6 @@ module.exports = {
   reconcileHeaderEntries,
   projectHeaderEntries,
   liveHeaderEntries,
+  orderedHeaderEntries,
   snapshotHeaderEntries
 };

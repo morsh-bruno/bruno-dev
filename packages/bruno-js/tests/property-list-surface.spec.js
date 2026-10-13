@@ -57,7 +57,7 @@ const cases = [
       createCookieJar: () => ({}),
       getCookiesForUrl: () => []
     }),
-    methods: [...READ_API, 'add', 'clear', 'delete', 'jar', 'remove', 'upsert'].sort(),
+    methods: [...READ_API, 'add', 'append', 'clear', 'delete', 'jar', 'remove', 'upsert'].sort(),
     ownKeys: []
   },
   {

@@ -68,12 +68,12 @@ describe('BrunoGrpcRequest', () => {
       ]
     });
 
-    test('disabled entries surface with disabled: true, in store order', () => {
+    test('disabled entries surface with disabled: true, ahead of the enabled ones', () => {
       const req = new BrunoGrpcRequest(withDisabled());
 
       expect(req.metadata.all()).toEqual([
-        { key: 'X-Token', value: 'authored' },
-        { key: 'x-off', value: 'hidden', disabled: true }
+        { key: 'x-off', value: 'hidden', disabled: true },
+        { key: 'X-Token', value: 'authored' }
       ]);
       expect(req.metadata.idx(1)).toEqual(req.metadata.all()[1]);
     });
@@ -109,7 +109,7 @@ describe('BrunoGrpcRequest', () => {
       raw.headers.Authorization = 'Bearer x';
       const req = new BrunoGrpcRequest(raw);
 
-      expect(req.metadata.map((entry) => entry.key)).toEqual(['X-Token', 'x-off', 'Authorization']);
+      expect(req.metadata.map((entry) => entry.key)).toEqual(['x-off', 'X-Token', 'Authorization']);
     });
   });
 

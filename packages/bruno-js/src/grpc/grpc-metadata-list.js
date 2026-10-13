@@ -2,6 +2,7 @@ const ReadOnlyPropertyList = require('../readonly-property-list');
 const {
   headerEntriesToObject,
   liveHeaderEntries,
+  orderedHeaderEntries,
   projectHeaderEntries,
   snapshotHeaderEntries
 } = require('../utils/header-entries');
@@ -39,7 +40,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
       // Reads hand out copies, so `one(k).disabled = true` on the result cannot bypass the write methods.
       ...(snapshot
         ? { items: snapshotHeaderEntries(source) }
-        : { dataSource: () => liveHeaderEntries(source).map((entry) => ({ ...entry })) })
+        : { dataSource: () => orderedHeaderEntries(source) })
     });
     this.#request = snapshot ? null : source;
   }

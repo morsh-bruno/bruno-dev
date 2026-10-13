@@ -681,7 +681,7 @@ describe('HeaderList (req.headerList)', () => {
   // ── Disabled headers ───────────────────────────────────────────────────
 
   describe('disabled headers', () => {
-    test('all() includes disabled headers with disabled: true, in store order', () => {
+    test('all() includes disabled headers with disabled: true, ahead of the enabled ones', () => {
       const rawReq = {
         url: 'https://example.com',
         method: 'GET',
@@ -694,8 +694,8 @@ describe('HeaderList (req.headerList)', () => {
       const brunoReq = new BrunoRequest(rawReq);
       const all = brunoReq.headerList.all();
       expect(all).toEqual([
-        { key: 'Content-Type', value: 'application/json' },
-        { key: 'X-Disabled', value: 'hidden', disabled: true }
+        { key: 'X-Disabled', value: 'hidden', disabled: true },
+        { key: 'Content-Type', value: 'application/json' }
       ]);
     });
 
@@ -966,24 +966,24 @@ describe('HeaderList (req.headerList)', () => {
       rawReq.headers['Authorization'] = 'Bearer x';
       const brunoReq = new BrunoRequest(rawReq);
       expect(brunoReq.headerList.all()).toEqual([
-        { key: 'A', value: '1' },
         { key: 'B', value: '2', disabled: true },
+        { key: 'A', value: '1' },
         { key: 'Authorization', value: 'Bearer x' }
       ]);
     });
 
-    test('upsert() with a re-cased key keeps the position and does not leave the header suppressed', () => {
+    test('upsert() with a re-cased key moves it to the end and does not leave the header suppressed', () => {
       const { list, rawReq } = createReqHeaders({ 'A': '1', 'X-Token': 't', 'B': '2' });
       list.upsert('x-token', 'u');
-      expect(list.map((h) => h.key)).toEqual(['A', 'x-token', 'B']);
+      expect(list.map((h) => h.key)).toEqual(['A', 'B', 'x-token']);
       expect(rawReq.headers).toEqual({ 'A': '1', 'B': '2', 'x-token': 'u' });
       expect(rawReq.__headersToDelete).toEqual([]);
     });
 
-    test('disabling keeps the position; enabling again clears the suppression', () => {
+    test('disabling moves the header to the front; enabling again clears the suppression', () => {
       const { list, rawReq } = createReqHeaders({ A: '1', B: '2', C: '3' });
       list.upsert({ key: 'B', value: '2', disabled: true });
-      expect(list.map((h) => h.key)).toEqual(['A', 'B', 'C']);
+      expect(list.map((h) => h.key)).toEqual(['B', 'A', 'C']);
       expect(rawReq.headers).toEqual({ A: '1', C: '3' });
       expect(rawReq.__headersToDelete).toEqual(['B']);
 
@@ -1011,7 +1011,7 @@ describe('HeaderList (req.headerList)', () => {
       };
       const brunoReq = new BrunoRequest(rawReq);
       brunoReq.headerList.add('C', '3');
-      expect(brunoReq.headerList.map((h) => h.key)).toEqual(['A', 'B', 'C']);
+      expect(brunoReq.headerList.map((h) => h.key)).toEqual(['B', 'A', 'C']);
     });
   });
 
