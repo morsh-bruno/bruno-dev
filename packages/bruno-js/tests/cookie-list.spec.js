@@ -118,6 +118,19 @@ describe('CookieList', () => {
     });
   });
 
+  describe('append()', () => {
+    test('delegates to jar.setCookie', () => {
+      const setCookie = jest.fn();
+      const cb = jest.fn();
+      const list = createCookieList({
+        createCookieJar: () => ({ setCookie })
+      });
+
+      list.append({ name: 'foo', value: 'bar' }, cb);
+      expect(setCookie).toHaveBeenCalledWith('https://example.com', { name: 'foo', value: 'bar' }, cb);
+    });
+  });
+
   describe('upsert()', () => {
     test('delegates to jar.setCookie', () => {
       const setCookie = jest.fn().mockResolvedValue('ok');

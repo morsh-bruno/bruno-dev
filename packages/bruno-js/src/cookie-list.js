@@ -60,6 +60,7 @@ const ReadOnlyPropertyList = require('./readonly-property-list');
  * | Method                   | Description                                          |
  * |--------------------------|------------------------------------------------------|
  * | `add(cookieObj, cb?)`    | Alias for `upsert()` — sets a cookie in the jar      |
+ * | `append(cookieObj, cb?)` | Alias for `add()`                                    |
  * | `upsert(cookieObj, cb?)` | Sets (or replaces) a cookie in the jar                |
  * | `remove(name, cb?)`      | Deletes a single cookie by name (no-op if missing)    |
  * | `delete(name, cb?)`      | Alias for `remove()`                                  |
@@ -118,6 +119,19 @@ class CookieList extends ReadOnlyPropertyList {
    */
   add(cookieObj, callback) {
     return this.upsert(cookieObj, callback);
+  }
+
+  /**
+   * Add a cookie to the jar (alias for {@link CookieList#add}).
+   *
+   * @param {object} cookieObj - Cookie object with at least `key` and `value`.
+   * @param {Function} [callback] - Optional `(error) => void` callback. If omitted, returns a Promise.
+   * @returns {Promise<void>|void} A Promise when no callback is given.
+   * @example
+   * await bru.cookies.append({ key: 'lang', value: 'en' });
+   */
+  append(cookieObj, callback) {
+    return this.add(cookieObj, callback);
   }
 
   /**
