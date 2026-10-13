@@ -218,22 +218,34 @@ class HeaderList extends ReadOnlyPropertyList {
 
     const disabled = item.disabled === true;
     const entries = this.#entries();
-    const existing = entries.find((entry) => this._keyMatches(entry.key, item.key));
+    const firstMatch = entries.find((entry) => this._keyMatches(entry.key, item.key));
+    // COMPAT: the request can carry two casings of one header (collection `X-Token`, request
+    // `x-token`). Like the pre-refactor upsert, an exact key wins and the first variant is dropped;
+    // renaming the first in place would leave a duplicate whose older value wins the projection.
+    const existing = entries.find((entry) => entry.key === item.key) ?? firstMatch;
 
-    if (existing) {
-      if (!existing.disabled && (existing.key !== item.key || disabled)) {
-        // The old exact key is what axios would see when it adds defaults back.
-        this.#trackDeleted(existing.key);
+    if (firstMatch && firstMatch !== existing) {
+      if (!firstMatch.disabled) {
+        this.#trackDeleted(firstMatch.key);
       }
-      existing.key = item.key;
-      existing.value = item.value;
-      if (disabled) {
-        existing.disabled = true;
-      } else {
-        delete existing.disabled;
-      }
+      entries.splice(entries.indexOf(firstMatch), 1);
+    }
+
+    if (existing && !existing.disabled && (existing.key !== item.key || disabled)) {
+      // The old exact key is what axios would see when it adds defaults back.
+      this.#trackDeleted(existing.key);
+    }
+
+    const entry = existing ?? {};
+    if (!existing) {
+      entries.push(entry);
+    }
+    entry.key = item.key;
+    entry.value = item.value;
+    if (disabled) {
+      entry.disabled = true;
     } else {
-      entries.push(disabled ? { key: item.key, value: item.value, disabled: true } : { key: item.key, value: item.value });
+      delete entry.disabled;
     }
 
     if (!disabled) {
