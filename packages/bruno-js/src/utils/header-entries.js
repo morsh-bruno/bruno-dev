@@ -109,7 +109,38 @@ const snapshotHeaderEntries = (source) => {
   return [];
 };
 
+/**
+ * `{ key: value }` map of header entries, matching Postman's `PropertyList.toObject()` signature.
+ * Disabled entries go in first so an enabled entry with the same key always wins the map,
+ * whatever their relative order in the list.
+ *
+ * @param {Array} entries - `{ key, value, disabled? }` entries
+ * @param {boolean} [excludeDisabled=false] - If true, skip disabled entries
+ * @param {boolean} [caseSensitive=true] - If false, lowercase all keys
+ * @param {boolean} [multiValue=false] - If true, only the first value of a duplicate key is kept
+ * @param {boolean} [sanitizeKeys=false] - If true, skip entries with falsy keys
+ * @returns {object}
+ */
+const headerEntriesToObject = (entries, excludeDisabled, caseSensitive, multiValue, sanitizeKeys) => {
+  const result = {};
+  const ordered = [...entries.filter((entry) => entry.disabled), ...entries.filter((entry) => !entry.disabled)];
+  for (const entry of ordered) {
+    if (excludeDisabled && entry.disabled) continue;
+    const key = caseSensitive === false ? entry.key.toLowerCase() : entry.key;
+    if (sanitizeKeys && !key) continue;
+    if (multiValue) {
+      if (!(key in result)) {
+        result[key] = entry.value;
+      }
+    } else {
+      result[key] = entry.value;
+    }
+  }
+  return result;
+};
+
 module.exports = {
+  headerEntriesToObject,
   setHeaderKey,
   reconcileHeaderEntries,
   projectHeaderEntries,
