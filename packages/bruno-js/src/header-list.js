@@ -1,5 +1,10 @@
 const ReadOnlyPropertyList = require('./readonly-property-list');
-const { liveHeaderEntries, projectHeaderEntries, snapshotHeaderEntries } = require('./utils/header-entries');
+const {
+  headerEntriesToObject,
+  liveHeaderEntries,
+  projectHeaderEntries,
+  snapshotHeaderEntries
+} = require('./utils/header-entries');
 
 /**
  * HeaderList — the `req.headerList` / `res.headerList` API in scripts.
@@ -346,24 +351,7 @@ class HeaderList extends ReadOnlyPropertyList {
    * @returns {object}
    */
   toObject(excludeDisabled, caseSensitive, multiValue, sanitizeKeys) {
-    const result = {};
-    const items = this.all();
-    // Disabled entries go in first so an enabled entry with the same key always wins the map,
-    // whatever their relative order in the list.
-    const ordered = [...items.filter((h) => h.disabled), ...items.filter((h) => !h.disabled)];
-    for (const item of ordered) {
-      if (excludeDisabled && item.disabled) continue;
-      const key = caseSensitive === false ? item.key.toLowerCase() : item.key;
-      if (sanitizeKeys && !key) continue;
-      if (multiValue) {
-        if (!(key in result)) {
-          result[key] = item.value;
-        }
-      } else {
-        result[key] = item.value;
-      }
-    }
-    return result;
+    return headerEntriesToObject(this.all(), excludeDisabled, caseSensitive, multiValue, sanitizeKeys);
   }
 
   /**

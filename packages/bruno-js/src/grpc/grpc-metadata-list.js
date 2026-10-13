@@ -1,5 +1,10 @@
 const ReadOnlyPropertyList = require('../readonly-property-list');
-const { liveHeaderEntries, projectHeaderEntries, snapshotHeaderEntries } = require('../utils/header-entries');
+const {
+  headerEntriesToObject,
+  liveHeaderEntries,
+  projectHeaderEntries,
+  snapshotHeaderEntries
+} = require('../utils/header-entries');
 
 /**
  * GrpcMetadataList — `bru.grpc.request.metadata`, `bru.grpc.response.metadata`,
@@ -43,7 +48,20 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
     return `metadata.${method}() is not available once the call has been sent — change metadata in the beforeCallStart hook`;
   }
 
-  // ── Transform override ────────────────────────────────────────────────
+  // ── Transform overrides ───────────────────────────────────────────────
+
+  /**
+   * Convert to a plain object. Matches Postman's PropertyList.toObject() signature; an enabled
+   * entry always wins over a disabled one with the same key.
+   * @param {boolean} [excludeDisabled=false] - If true, skip disabled entries
+   * @param {boolean} [caseSensitive=true] - If false, lowercase all keys
+   * @param {boolean} [multiValue=false] - If true, only the first value of a duplicate key is kept
+   * @param {boolean} [sanitizeKeys=false] - If true, skip entries with falsy keys
+   * @returns {object}
+   */
+  toObject(excludeDisabled, caseSensitive, multiValue, sanitizeKeys) {
+    return headerEntriesToObject(this.all(), excludeDisabled, caseSensitive, multiValue, sanitizeKeys);
+  }
 
   /** `key: value` per line — how metadata travels as HTTP/2 headers. Skips disabled entries. */
   toString() {

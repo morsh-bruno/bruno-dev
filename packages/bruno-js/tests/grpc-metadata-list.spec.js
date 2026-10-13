@@ -170,6 +170,57 @@ describe('GrpcMetadataList', () => {
       expect(list.toString()).toBe('X-Token: abc123');
     });
 
+    test('toObject() includes disabled entries', () => {
+      const { list } = createWithDisabled();
+      expect(list.toObject()).toEqual({ 'X-Token': 'abc123', 'x-off': 'hidden' });
+    });
+
+    test('toObject() lets an enabled entry win over a disabled one with the same key, in any order', () => {
+      const request = {
+        headers: { 'x-tenant': 'acme' },
+        headerEntries: [
+          { key: 'x-tenant', value: 'acme' },
+          { key: 'x-tenant', value: 'old-tenant', disabled: true },
+          { key: 'x-debug', value: '1', disabled: true }
+        ]
+      };
+      const list = new GrpcMetadataList(request, { writable: true });
+      expect(list.toObject()).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
+
+      request.headerEntries.reverse();
+      expect(list.toObject()).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
+    });
+
+    test('toObject(excludeDisabled) skips disabled entries', () => {
+      const { list } = createWithDisabled();
+      expect(list.toObject(true)).toEqual({ 'X-Token': 'abc123' });
+      expect(list.toObject(false)).toEqual({ 'X-Token': 'abc123', 'x-off': 'hidden' });
+    });
+
+    test('toObject(_, false) lowercases keys', () => {
+      const { list } = createWithDisabled();
+      expect(list.toObject(true, false)).toEqual({ 'x-token': 'abc123' });
+    });
+
+    test('toObject(_, _, true) keeps the first value for a duplicate key', () => {
+      const request = {
+        headers: { 'x-tenant': 'acme' },
+        headerEntries: [
+          { key: 'x-tenant', value: 'acme' },
+          { key: 'x-tenant', value: 'old-tenant', disabled: true }
+        ]
+      };
+      const list = new GrpcMetadataList(request, { writable: true });
+      expect(list.toObject(false, true, true)['x-tenant']).toBe('old-tenant');
+      expect(list.toObject(false, true, false)['x-tenant']).toBe('acme');
+    });
+
+    test('toObject(_, _, _, true) skips entries with an empty key', () => {
+      const list = new GrpcMetadataList([{ name: '', value: 'nameless' }, { name: 'a', value: '1' }]);
+      expect(list.toObject(false, true, false, true)).toEqual({ a: '1' });
+      expect(list.toObject()).toEqual({ '': 'nameless', 'a': '1' });
+    });
+
     test('add() with disabled: true disables an enabled key in place', () => {
       const { list, metadata, entries } = createWithDisabled();
       list.add({ key: 'x-token', value: 'off-now', disabled: true });
