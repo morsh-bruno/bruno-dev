@@ -972,6 +972,34 @@ describe('HeaderList (req.headerList)', () => {
       ]);
     });
 
+    describe('upsert() with two casings of one header (pre-refactor behavior)', () => {
+      const caseVariants = { 'X-Token': 'a', 'x-token': 'b', 'Accept': 'json' };
+
+      test('the first casing only updates that entry', () => {
+        const { list, rawReq } = createReqHeaders(caseVariants);
+        expect(list.upsert('X-Token', 'new')).toBe(false);
+        expect(rawReq.headers).toEqual({ 'X-Token': 'new', 'x-token': 'b', 'Accept': 'json' });
+        expect(list.count()).toBe(3);
+      });
+
+      test('the second casing drops the first variant and writes the value', () => {
+        const { list, rawReq } = createReqHeaders(caseVariants);
+        expect(list.upsert('x-token', 'new')).toBe(false);
+        expect(rawReq.headers).toEqual({ 'x-token': 'new', 'Accept': 'json' });
+        expect(rawReq.headerEntries).toEqual([{ key: 'x-token', value: 'new' }, { key: 'Accept', value: 'json' }]);
+        expect(list.get('x-token')).toBe('new');
+        expect(rawReq.__headersToDelete).toEqual([]);
+      });
+
+      test('a third casing replaces the first variant and leaves the second', () => {
+        const { list, rawReq } = createReqHeaders(caseVariants);
+        expect(list.upsert('X-TOKEN', 'new')).toBe(false);
+        expect(rawReq.headers).toEqual({ 'x-token': 'b', 'Accept': 'json', 'X-TOKEN': 'new' });
+        expect(list.count()).toBe(3);
+        expect(rawReq.__headersToDelete).toEqual([]);
+      });
+    });
+
     test('upsert() with a re-cased key moves it to the end and does not leave the header suppressed', () => {
       const { list, rawReq } = createReqHeaders({ 'A': '1', 'X-Token': 't', 'B': '2' });
       list.upsert('x-token', 'u');
