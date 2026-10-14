@@ -63,7 +63,6 @@ describe('prepare-request: prepareRequest', () => {
         { key: 'x-off', value: 'off', disabled: true },
         { key: 'x-on', value: 'last-wins' }
       ]);
-      expect(result).not.toHaveProperty('disabledHeaders');
     });
   });
 

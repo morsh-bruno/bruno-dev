@@ -404,10 +404,6 @@ const prepareRequest = async (item, collection = {}, abortController) => {
     request.promptVariables = collection?.promptVariables || {};
   }
 
-  // `headers` is what goes on the wire (last enabled row wins per name). `headerEntries` is the
-  // ordered store behind `req.headerList`, disabled rows included; the list keeps the two in sync.
-  // COMPAT: `req.headerList.all()` follows this order (what mergeHeaders emits: enabled rows first,
-  // then disabled rows). It used to list disabled headers first. `disabledHeaders` is no longer set.
   const headerEntries = [];
   each(get(request, 'headers', []), (h) => {
     if (!(h.name?.length > 0)) {
@@ -441,8 +437,6 @@ const prepareRequest = async (item, collection = {}, abortController) => {
   axiosRequest = setAuthHeaders(axiosRequest, request, collectionRoot);
 
   if (request.body.mode === 'json') {
-    // Headers added to the object from here on (auth, this default) need no entry: the list
-    // appends them from `headers` on its first read.
     if (!contentTypeDefined) {
       axiosRequest.headers['content-type'] = 'application/json';
     }

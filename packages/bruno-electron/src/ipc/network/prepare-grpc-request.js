@@ -152,10 +152,6 @@ const buildGrpcRequest = async (item, collection, environment, runtimeVariables)
     request.promptVariables = promptVariables;
   }
 
-  // `headers` is what the client builds call metadata from. `headerEntries` is the ordered store
-  // behind `bru.grpc.request.metadata`, disabled rows included; the list keeps the two in sync.
-  // COMPAT: the list follows this order (what mergeHeaders emits: enabled rows first, then
-  // disabled rows). `disabledHeaders` is no longer set.
   const headerEntries = [];
   each(get(request, 'headers', []), (h) => {
     if (!(h.name?.length > 0)) {
