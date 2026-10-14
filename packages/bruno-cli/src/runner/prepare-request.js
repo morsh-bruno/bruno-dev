@@ -1,5 +1,4 @@
 const get = require('lodash/get');
-const each = require('lodash/each');
 const filter = require('lodash/filter');
 const find = require('lodash/find');
 const decomment = require('decomment');
@@ -7,6 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const { mergeHeaders, mergeScripts, mergeVars, mergeAuth, getTreePathFromCollectionToItem } = require('../utils/collection');
 const { getEffectiveTags, getOwnTags, getInheritedTagsFromTreePath } = require('@usebruno/common');
+const { buildHeaderEntries } = require('@usebruno/js');
 const path = require('node:path');
 const { isLargeFile } = require('../utils/filesystem');
 const { getFormattedOauth2Credentials } = require('../utils/oauth2');
@@ -17,7 +17,6 @@ const prepareRequest = async (item = {}, collection = {}) => {
   const request = item?.request;
   const brunoConfig = collection.draft?.brunoConfig ? get(collection, 'draft.brunoConfig', {}) : get(collection, 'brunoConfig', {});
   const collectionPath = collection?.pathname;
-  const headers = {};
   let contentTypeDefined = false;
 
   const scriptFlow = brunoConfig?.scripts?.flow ?? 'sandwich';
@@ -29,21 +28,10 @@ const prepareRequest = async (item = {}, collection = {}) => {
     mergeAuth(collection, request, requestTreePath);
   }
 
-  const headerEntries = [];
-  each(get(request, 'headers', []), (h) => {
-    if (!(h.name?.length > 0)) {
-      return;
-    }
-    if (h.enabled) {
-      headers[h.name] = h.value;
-      headerEntries.push({ key: h.name, value: h.value });
-      if (h.name.toLowerCase() === 'content-type') {
-        contentTypeDefined = true;
-      }
-    } else {
-      headerEntries.push({ key: h.name, value: h.value, disabled: true });
-    }
-  });
+  const { headers, headerEntries } = buildHeaderEntries(get(request, 'headers', []));
+  if (Object.keys(headers).some((name) => name.toLowerCase() === 'content-type')) {
+    contentTypeDefined = true;
+  }
 
   let axiosRequest = {
     method: request.method,

@@ -1,4 +1,4 @@
-const { cloneDeep, each, get } = require('lodash');
+const { cloneDeep, get } = require('lodash');
 const interpolateVars = require('./interpolate-vars');
 const { getEnvVars, getTreePathFromCollectionToItem, mergeHeaders, mergeScripts, mergeVars, mergeAuth, getFormattedCollectionOauth2Credentials } = require('../../utils/collection');
 const { getProcessEnvVars } = require('../../store/process-env');
@@ -6,6 +6,7 @@ const { getOAuth2TokenUsingPasswordCredentials, getOAuth2TokenUsingClientCredent
 const { setAuthHeaders } = require('./prepare-request');
 const { getCertsAndProxyConfig } = require('./cert-utils');
 const { interpolateString } = require('./interpolate-string');
+const { buildHeaderEntries } = require('@usebruno/js');
 
 const processHeaders = (headers) => {
   Object.entries(headers).forEach(([key, value]) => {
@@ -136,7 +137,6 @@ const configureRequest = async (grpcRequest, request, collection, envVars, runti
 const buildGrpcRequest = async (item, collection, environment, runtimeVariables) => {
   const request = item.draft ? item.draft.request : item.request;
   const collectionRoot = collection?.draft?.root ? get(collection, 'draft.root', {}) : get(collection, 'root', {});
-  const headers = {};
   const url = request.url;
   const { promptVariables = {} } = collection;
 
@@ -152,18 +152,7 @@ const buildGrpcRequest = async (item, collection, environment, runtimeVariables)
     request.promptVariables = promptVariables;
   }
 
-  const headerEntries = [];
-  each(get(request, 'headers', []), (h) => {
-    if (!(h.name?.length > 0)) {
-      return;
-    }
-    if (h.enabled) {
-      headers[h.name] = h.value;
-      headerEntries.push({ key: h.name, value: h.value });
-    } else {
-      headerEntries.push({ key: h.name, value: h.value, disabled: true });
-    }
-  });
+  const { headers, headerEntries } = buildHeaderEntries(get(request, 'headers', []));
 
   const processEnvVars = getProcessEnvVars(collection.uid);
   const envVars = getEnvVars(environment);

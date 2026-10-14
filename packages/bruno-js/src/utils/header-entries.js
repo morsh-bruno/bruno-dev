@@ -20,6 +20,43 @@
  * Keys are compared exactly here; case-insensitivity is a property of the list API only.
  */
 
+/**
+ * Build both views from the `[{ name, value, enabled }]` rows a request is prepared from (after the
+ * collection and folder headers are merged in). The one place the CLI and the app create the store.
+ *
+ * Rows without a name are skipped. A name enabled more than once gets one entry, at the position of
+ * its first row with the value of its last: the same place and value the object gives it, so the
+ * store starts with one enabled entry per key.
+ * @param {Array<{ name: string, value: *, enabled: boolean }>} rows
+ * @returns {{ headers: object, headerEntries: Array }}
+ */
+const buildHeaderEntries = (rows) => {
+  const headers = {};
+  const headerEntries = [];
+  const enabledByKey = new Map();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!(row?.name?.length > 0)) continue;
+
+    if (!row.enabled) {
+      headerEntries.push({ key: row.name, value: row.value, disabled: true });
+      continue;
+    }
+
+    headers[row.name] = row.value;
+    const existing = enabledByKey.get(row.name);
+    if (existing) {
+      existing.value = row.value;
+    } else {
+      const entry = { key: row.name, value: row.value };
+      enabledByKey.set(row.name, entry);
+      headerEntries.push(entry);
+    }
+  }
+
+  return { headers, headerEntries };
+};
+
 // defineProperty so a key like `__proto__` becomes an own entry instead of changing the prototype.
 const setHeaderKey = (target, key, value) => {
   Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
@@ -157,6 +194,7 @@ const headerEntriesToObject = (entries, excludeDisabled, caseSensitive, multiVal
 };
 
 module.exports = {
+  buildHeaderEntries,
   headerEntriesToObject,
   setHeaderKey,
   reconcileHeaderEntries,

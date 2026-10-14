@@ -100,18 +100,19 @@ describe('prepare-grpc-request: prepareGrpcRequest', () => {
       ]);
     });
 
-    it('should keep enabled and disabled headers apart', async () => {
+    it('should keep enabled and disabled headers apart, with one entry per enabled name', async () => {
       mockItem.request.headers = [
         { name: 'x-on', value: 'on', enabled: true },
         { name: 'x-off', value: 'off', enabled: false },
-        { name: '', value: 'nameless', enabled: false }
+        { name: '', value: 'nameless', enabled: false },
+        { name: 'x-on', value: 'last-wins', enabled: true }
       ];
 
       const result = await prepareGrpcRequest(mockItem, mockCollection, mockEnvironment, mockRuntimeVariables);
 
-      expect(result.headers).toEqual({ 'x-on': 'on' });
+      expect(result.headers).toEqual({ 'x-on': 'last-wins' });
       expect(result.headerEntries).toEqual([
-        { key: 'x-on', value: 'on' },
+        { key: 'x-on', value: 'last-wins' },
         { key: 'x-off', value: 'off', disabled: true }
       ]);
     });
