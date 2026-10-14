@@ -30,8 +30,6 @@ class BrunoGrpcRequest {
     this.authMode = request.authMode || 'none';
     this.protoPath = request.protoPath;
     this.name = request.name;
-    // The list edits `request.headerEntries` and projects into `request.headers`, the object the
-    // gRPC client builds call metadata from once the hook returns.
     this.metadata = new GrpcMetadataList(request, { writable: metadataWritable });
     // The list clones what it is given, so a hook editing a message cannot reach what the call sent.
     this.messages = new GrpcMessageList(sentMessages);
