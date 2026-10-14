@@ -22,7 +22,6 @@ class BrunoGrpcResponse {
     this.statusCode = response.statusCode;
     this.statusText = response.statusText;
     this.messages = new GrpcMessageList(response.messages);
-    // Read-only snapshots of the [{ name, value }] display rows
     this.metadata = new GrpcMetadataList(response.metadata);
     this.trailers = new GrpcMetadataList(response.trailers);
     this.duration = response.duration;

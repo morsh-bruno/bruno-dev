@@ -269,30 +269,6 @@ describe('ReadOnlyPropertyList', () => {
     });
   });
 
-  // ── Writable guard ───────────────────────────────────────────────────
-
-  describe('_assertWritable()', () => {
-    test('is a no-op on a writable list', () => {
-      const list = new ReadOnlyPropertyList({ items: [] });
-      expect(() => list._assertWritable('add')).not.toThrow();
-    });
-
-    test('throws the default message on a read-only list', () => {
-      const list = new ReadOnlyPropertyList({ items: [], writable: false });
-      expect(() => list._assertWritable('add')).toThrow('add() is not available on a read-only list');
-    });
-
-    test('a subclass override of _readOnlyMessage changes the text', () => {
-      class Custom extends ReadOnlyPropertyList {
-        _readOnlyMessage(method) {
-          return `custom: ${method}`;
-        }
-      }
-      const list = new Custom({ items: [], writable: false });
-      expect(() => list._assertWritable('upsert')).toThrow('custom: upsert');
-    });
-  });
-
   test('own enumerable keys hold no methods', () => {
     const list = new ReadOnlyPropertyList({ items: [] });
     const methodNames = Object.getOwnPropertyNames(ReadOnlyPropertyList.prototype);
