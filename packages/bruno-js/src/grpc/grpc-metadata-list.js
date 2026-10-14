@@ -22,6 +22,8 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
   constructor(source, { writable = false } = {}) {
     const snapshot = !source || Array.isArray(source);
     super({
+      keyProperty: 'key',
+      valueProperty: 'value',
       caseInsensitiveKeys: true,
       ...(snapshot
         ? { items: snapshotHeaderEntries(source) }
@@ -39,22 +41,9 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
     }
   }
 
-  // ── Transform overrides ───────────────────────────────────────────────
+  // ── Transform override ───────────────────────────────────────────────
 
-  /**
-   * Convert to a plain object. Matches Postman's PropertyList.toObject() signature; an enabled
-   * entry always wins over a disabled one with the same key.
-   * @param {boolean} [excludeDisabled=true] - If true, skip disabled entries
-   * @param {boolean} [caseSensitive=true] - If false, lowercase all keys
-   * @param {boolean} [multiValue=false] - If true, only the first value of a duplicate key is kept
-   * @param {boolean} [sanitizeKeys=false] - If true, skip entries with falsy keys
-   * @returns {object}
-   */
-  toObject(excludeDisabled = true, caseSensitive, multiValue, sanitizeKeys) {
-    return headerEntriesToObject(this.all(), excludeDisabled, caseSensitive, multiValue, sanitizeKeys);
-  }
-
-  /** `key: value` per line — how metadata travels as HTTP/2 headers. Skips disabled entries. */
+  /** `key: value` per line — how metadata travels as HTTP/2 headers. */
   toString() {
     return this.all()
       .filter((entry) => !entry.disabled)
@@ -125,6 +114,19 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
     entries.length = 0;
 
     projectHeaderEntries(entries, this.#request.headers);
+  }
+
+  /**
+   * Convert to a plain object. Matches Postman's PropertyList.toObject() signature; an enabled
+   * entry always wins over a disabled one with the same key.
+   * @param {boolean} [excludeDisabled=true] - If true, skip disabled entries
+   * @param {boolean} [caseSensitive=true] - If false, lowercase all keys
+   * @param {boolean} [multiValue=false] - If true, only the first value of a duplicate key is kept
+   * @param {boolean} [sanitizeKeys=false] - If true, skip entries with falsy keys
+   * @returns {object}
+   */
+  toObject(excludeDisabled = true, caseSensitive, multiValue, sanitizeKeys) {
+    return headerEntriesToObject(this.all(), excludeDisabled, caseSensitive, multiValue, sanitizeKeys);
   }
 
   #write({ key, value, disabled }) {
