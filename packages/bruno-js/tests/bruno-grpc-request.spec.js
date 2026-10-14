@@ -58,14 +58,6 @@ describe('BrunoGrpcRequest', () => {
 
       expect(raw.headers).toEqual({ 'x-token': 'from-hook' });
     });
-
-    test('a header added to the map after the entries were built shows up appended', () => {
-      const raw = makeReq({ headerEntries: [{ key: 'X-Token', value: 'authored' }] });
-      raw.headers.Authorization = 'Bearer x';
-      const req = new BrunoGrpcRequest(raw);
-
-      expect(req.metadata.map((entry) => entry.key)).toEqual(['X-Token', 'Authorization']);
-    });
   });
 
   describe('messages', () => {

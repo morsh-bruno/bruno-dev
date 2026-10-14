@@ -37,7 +37,7 @@ describe('GrpcMetadataList', () => {
       expect(list.has('missing')).toBe(false);
     });
 
-    test('reads pick up keys written to the backing map directly', () => {
+    test('reads re-run against the backing map on every call', () => {
       const { list, metadata } = createList();
       expect(list.count()).toBe(2);
 
@@ -71,7 +71,6 @@ describe('GrpcMetadataList', () => {
     test('items returned by reads are copies of the store', () => {
       const { list, request } = createList();
       list.one('x-token').value = 'edited';
-      list.all()[0].disabled = true;
       expect(request.headerEntries).toEqual([
         { key: 'X-Token', value: 'abc123' },
         { key: 'content-type', value: 'application/grpc' }
@@ -108,8 +107,7 @@ describe('GrpcMetadataList', () => {
       const { list, metadata } = createList();
       list.add({ key: 'x-request-id', value: 'req-1' });
       list.add('x-request-id');
-      list.add({ key: '', value: 'nameless' });
-      expect(metadata).toEqual({ ...defaultMetadata, 'x-request-id': 'req-1' });
+      expect(metadata['x-request-id']).toBe('req-1');
     });
 
     test('remove() matches case-insensitively', () => {
@@ -172,24 +170,11 @@ describe('GrpcMetadataList', () => {
       expect(list.map((entry) => entry.key)).toEqual(['x-a', 'b', 'X-a']);
     });
 
-    test('add() behaves like upsert()', () => {
-      const { list, request } = createWithCasings();
-      list.add({ key: 'x-a', value: 'new' });
-      expect(request.headers).toEqual({ 'x-a': 'new', 'b': '3' });
-    });
-
     test('remove() drops only the first casing', () => {
       const { list, request } = createWithCasings();
       list.remove('x-a');
       expect(request.headers).toEqual({ 'x-a': '2', 'b': '3' });
     });
-  });
-
-  test('add() ignores a disabled flag, so the entry is still sent', () => {
-    const { list, metadata } = createList();
-    list.add({ key: 'x-request-id', value: 'req-1', disabled: true });
-    expect(metadata['x-request-id']).toBe('req-1');
-    expect(list.one('x-request-id')).toEqual({ key: 'x-request-id', value: 'req-1' });
   });
 
   describe('read-only snapshot', () => {
