@@ -144,7 +144,7 @@ const buildGrpcRequest = async (item, collection, environment, runtimeVariables)
   const requestTreePath = getTreePathFromCollectionToItem(collection, item);
   if (requestTreePath && requestTreePath.length > 0) {
     mergeAuth(collection, request, requestTreePath);
-    mergeHeaders(collection, request, requestTreePath, { includeDisabledHeaders: true });
+    mergeHeaders(collection, request, requestTreePath);
     mergeScripts(collection, request, requestTreePath, scriptFlow);
     mergeVars(collection, request, requestTreePath);
     request.globalEnvironmentVariables = collection?.globalEnvironmentVariables;
@@ -152,7 +152,7 @@ const buildGrpcRequest = async (item, collection, environment, runtimeVariables)
     request.promptVariables = promptVariables;
   }
 
-  const { headers, headerEntries } = buildHeaderEntries(get(request, 'headers', []));
+  const { headers, headerEntries } = buildHeaderEntries(get(request, 'headers', []).filter((h) => h.enabled));
 
   const processEnvVars = getProcessEnvVars(collection.uid);
   const envVars = getEnvVars(environment);

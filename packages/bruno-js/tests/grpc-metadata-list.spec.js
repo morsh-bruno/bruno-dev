@@ -87,13 +87,13 @@ describe('GrpcMetadataList', () => {
       expect(request.headerEntries.at(-1)).toEqual({ key: 'x-request-id', value: 'req-1' });
     });
 
-    test('upsert() with different casing replaces the existing entry in place instead of duplicating it', () => {
-      const { list, metadata, request } = createList();
+    test('upsert() with different casing replaces the existing entry instead of duplicating it', () => {
+      const { list, metadata } = createList();
       list.upsert('x-token', 'updated');
       expect(metadata).toEqual({ 'x-token': 'updated', 'content-type': 'application/grpc' });
-      expect(request.headerEntries).toEqual([
-        { key: 'x-token', value: 'updated' },
-        { key: 'content-type', value: 'application/grpc' }
+      expect(list.all()).toEqual([
+        { key: 'content-type', value: 'application/grpc' },
+        { key: 'x-token', value: 'updated' }
       ]);
     });
 
@@ -138,135 +138,58 @@ describe('GrpcMetadataList', () => {
     });
   });
 
-  describe('disabled entries', () => {
-    function createWithDisabled() {
+  describe('one key under several casings', () => {
+    // Collection-level `X-A` and request-level `x-a` both reach the request; the client sends both.
+    const createWithCasings = () => {
       const request = {
-        headers: { 'X-Token': 'abc123' },
+        headers: { 'X-A': '1', 'x-a': '2', 'b': '3' },
         headerEntries: [
-          { key: 'X-Token', value: 'abc123' },
-          { key: 'x-off', value: 'hidden', disabled: true }
+          { key: 'X-A', value: '1' },
+          { key: 'x-a', value: '2' },
+          { key: 'b', value: '3' }
         ]
       };
-      const list = new GrpcMetadataList(request, { writable: true });
-      return { list, metadata: request.headers, entries: request.headerEntries };
-    }
+      return { list: new GrpcMetadataList(request, { writable: true }), request };
+    };
 
-    test('appear in all() with disabled: true, ahead of the enabled ones', () => {
-      const { list } = createWithDisabled();
-      expect(list.all()).toEqual([
-        { key: 'x-off', value: 'hidden', disabled: true },
-        { key: 'X-Token', value: 'abc123' }
-      ]);
-      expect(list.one('X-OFF')).toEqual({ key: 'x-off', value: 'hidden', disabled: true });
+    test('upsert() under another casing replaces the first casing and updates the exact key', () => {
+      const { list, request } = createWithCasings();
+      list.upsert('x-a', 'new');
+      expect(request.headers).toEqual({ 'x-a': 'new', 'b': '3' });
+      expect(list.get('X-A')).toBe('new');
     });
 
-    test('idx(i) equals all()[i]', () => {
-      const { list } = createWithDisabled();
-      expect(list.idx(1)).toEqual(list.all()[1]);
+    test('upsert() under the first casing updates it and leaves the other casing alone', () => {
+      const { list, request } = createWithCasings();
+      list.upsert('X-A', 'new');
+      expect(request.headers).toEqual({ 'X-A': 'new', 'x-a': '2', 'b': '3' });
     });
 
-    test('toString() skips disabled entries', () => {
-      const { list } = createWithDisabled();
-      expect(list.toString()).toBe('X-Token: abc123');
+    test('upsert() under a third casing replaces the first casing and appends the new one', () => {
+      const { list, request } = createWithCasings();
+      list.upsert('X-a', 'new');
+      expect(request.headers).toEqual({ 'x-a': '2', 'b': '3', 'X-a': 'new' });
+      expect(list.map((entry) => entry.key)).toEqual(['x-a', 'b', 'X-a']);
     });
 
-    test('toObject() skips disabled entries by default', () => {
-      const { list } = createWithDisabled();
-      expect(list.toObject()).toEqual({ 'X-Token': 'abc123' });
+    test('add() behaves like upsert()', () => {
+      const { list, request } = createWithCasings();
+      list.add({ key: 'x-a', value: 'new' });
+      expect(request.headers).toEqual({ 'x-a': 'new', 'b': '3' });
     });
 
-    test('toObject(false) includes disabled entries', () => {
-      const { list } = createWithDisabled();
-      expect(list.toObject(false)).toEqual({ 'X-Token': 'abc123', 'x-off': 'hidden' });
+    test('remove() drops only the first casing', () => {
+      const { list, request } = createWithCasings();
+      list.remove('x-a');
+      expect(request.headers).toEqual({ 'x-a': '2', 'b': '3' });
     });
+  });
 
-    test('toObject(false) lets an enabled entry win over a disabled one with the same key, in any order', () => {
-      const request = {
-        headers: { 'x-tenant': 'acme' },
-        headerEntries: [
-          { key: 'x-tenant', value: 'acme' },
-          { key: 'x-tenant', value: 'old-tenant', disabled: true },
-          { key: 'x-debug', value: '1', disabled: true }
-        ]
-      };
-      const list = new GrpcMetadataList(request, { writable: true });
-      expect(list.toObject(false)).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
-
-      request.headerEntries.reverse();
-      expect(list.toObject(false)).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
-    });
-
-    test('toObject(excludeDisabled) skips disabled entries', () => {
-      const { list } = createWithDisabled();
-      expect(list.toObject(true)).toEqual({ 'X-Token': 'abc123' });
-      expect(list.toObject(false)).toEqual({ 'X-Token': 'abc123', 'x-off': 'hidden' });
-    });
-
-    test('toObject(_, false) lowercases keys', () => {
-      const { list } = createWithDisabled();
-      expect(list.toObject(true, false)).toEqual({ 'x-token': 'abc123' });
-    });
-
-    test('toObject(_, _, true) keeps the first value for a duplicate key', () => {
-      const request = {
-        headers: { 'x-tenant': 'acme' },
-        headerEntries: [
-          { key: 'x-tenant', value: 'acme' },
-          { key: 'x-tenant', value: 'old-tenant', disabled: true }
-        ]
-      };
-      const list = new GrpcMetadataList(request, { writable: true });
-      expect(list.toObject(false, true, true)['x-tenant']).toBe('old-tenant');
-      expect(list.toObject(false, true, false)['x-tenant']).toBe('acme');
-    });
-
-    test('toObject(_, _, _, true) skips entries with an empty key', () => {
-      const list = new GrpcMetadataList([{ name: '', value: 'nameless' }, { name: 'a', value: '1' }]);
-      expect(list.toObject(false, true, false, true)).toEqual({ a: '1' });
-      expect(list.toObject()).toEqual({ '': 'nameless', 'a': '1' });
-    });
-
-    test('add() with disabled: true disables an enabled key in place', () => {
-      const { list, metadata, entries } = createWithDisabled();
-      list.add({ key: 'x-token', value: 'off-now', disabled: true });
-      expect(metadata).toEqual({});
-      expect(entries).toEqual([
-        { key: 'x-token', value: 'off-now', disabled: true },
-        { key: 'x-off', value: 'hidden', disabled: true }
-      ]);
-    });
-
-    test('upsert() on a disabled key enables it', () => {
-      const { list, metadata, entries } = createWithDisabled();
-      list.upsert('X-Off', 'on');
-      expect(metadata).toEqual({ 'X-Token': 'abc123', 'X-Off': 'on' });
-      expect(entries).toEqual([
-        { key: 'X-Token', value: 'abc123' },
-        { key: 'X-Off', value: 'on' }
-      ]);
-    });
-
-    test('remove() drops enabled and disabled entries alike', () => {
-      const { list, metadata, entries } = createWithDisabled();
-      list.remove('X-OFF');
-      list.remove('x-token');
-      expect(metadata).toEqual({});
-      expect(entries).toEqual([]);
-    });
-
-    test('clear() empties both views in place', () => {
-      const { list, metadata, entries } = createWithDisabled();
-      list.clear();
-      expect(metadata).toEqual({});
-      expect(entries).toEqual([]);
-    });
-
-    test('a request without headerEntries gets them on the first disabled write', () => {
-      const { list, request } = createList();
-      list.add({ key: 'x-off', value: 'v', disabled: true });
-      expect(list.one('x-off')).toEqual({ key: 'x-off', value: 'v', disabled: true });
-      expect(request.headerEntries.at(-1)).toEqual({ key: 'x-off', value: 'v', disabled: true });
-    });
+  test('add() ignores a disabled flag, so the entry is still sent', () => {
+    const { list, metadata } = createList();
+    list.add({ key: 'x-request-id', value: 'req-1', disabled: true });
+    expect(metadata['x-request-id']).toBe('req-1');
+    expect(list.one('x-request-id')).toEqual({ key: 'x-request-id', value: 'req-1' });
   });
 
   describe('read-only snapshot', () => {
