@@ -7,23 +7,10 @@ const {
   snapshotHeaderEntries
 } = require('../utils/header-entries');
 
-/**
- * GrpcMetadataList — `bru.grpc.request.metadata`, `bru.grpc.response.metadata`,
- * `bru.grpc.response.trailers`.
- *
- * Request side: array-backed, exactly like `HeaderList`. The store is `request.headerEntries`;
- * `request.headers` is the `{ name: value }` projection the gRPC client builds `Metadata` from.
- * Writable in `beforeCallStart`, read-only once the call is open. See `utils/header-entries.js`.
- *
- * Response side: a static snapshot of the `[{ name, value }]` display rows, read-only.
- *
- * COMPAT: the constructor takes the request (or the rows) directly, the same shape as `HeaderList`.
- * It used to take a `readMetadata` accessor returning the `{ name: value }` map.
- *
- * Keep quickjs shim up to date on any updates to this class
- */
+// Keep quickjs shim up to date on any updates to this class
 class GrpcMetadataList extends ReadOnlyPropertyList {
   #request;
+  #writable;
 
   /**
    * @param {object|Array} source - The prepared gRPC request (its `headers` and `headerEntries`
@@ -36,17 +23,20 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
     const snapshot = !source || Array.isArray(source);
     super({
       caseInsensitiveKeys: true,
-      writable: writable && !snapshot,
-      // Reads hand out copies, so `one(k).disabled = true` on the result cannot bypass the write methods.
       ...(snapshot
         ? { items: snapshotHeaderEntries(source) }
         : { dataSource: () => orderedHeaderEntries(source) })
     });
     this.#request = snapshot ? null : source;
+    this.#writable = writable && !snapshot;
   }
 
-  _readOnlyMessage(method) {
-    return `metadata.${method}() is not available once the call has been sent — change metadata in the beforeCallStart hook`;
+  #assertWritable(method) {
+    if (!this.#writable) {
+      throw new Error(
+        `metadata.${method}() is not available once the call has been sent — change metadata in the beforeCallStart hook`
+      );
+    }
   }
 
   // ── Transform overrides ───────────────────────────────────────────────
@@ -54,13 +44,13 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
   /**
    * Convert to a plain object. Matches Postman's PropertyList.toObject() signature; an enabled
    * entry always wins over a disabled one with the same key.
-   * @param {boolean} [excludeDisabled=false] - If true, skip disabled entries
+   * @param {boolean} [excludeDisabled=true] - If true, skip disabled entries
    * @param {boolean} [caseSensitive=true] - If false, lowercase all keys
    * @param {boolean} [multiValue=false] - If true, only the first value of a duplicate key is kept
    * @param {boolean} [sanitizeKeys=false] - If true, skip entries with falsy keys
    * @returns {object}
    */
-  toObject(excludeDisabled, caseSensitive, multiValue, sanitizeKeys) {
+  toObject(excludeDisabled = true, caseSensitive, multiValue, sanitizeKeys) {
     return headerEntriesToObject(this.all(), excludeDisabled, caseSensitive, multiValue, sanitizeKeys);
   }
 
@@ -82,7 +72,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
    * @param {*} value
    */
   upsert(key, value) {
-    this._assertWritable('upsert');
+    this.#assertWritable('upsert');
 
     if (typeof key !== 'string' || !key.length) {
       return;
@@ -98,7 +88,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
    * @param {object} item
    */
   add(item) {
-    this._assertWritable('add');
+    this.#assertWritable('add');
 
     if (!item || typeof item !== 'object' || typeof item.key !== 'string' || !item.key.length) {
       return;
@@ -112,7 +102,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
    * @param {string} key
    */
   remove(key) {
-    this._assertWritable('remove');
+    this.#assertWritable('remove');
 
     const entries = liveHeaderEntries(this.#request);
 
@@ -127,7 +117,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
 
   /** Remove every entry, enabled and disabled. */
   clear() {
-    this._assertWritable('clear');
+    this.#assertWritable('clear');
 
     const entries = liveHeaderEntries(this.#request);
 

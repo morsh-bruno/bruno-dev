@@ -170,12 +170,17 @@ describe('GrpcMetadataList', () => {
       expect(list.toString()).toBe('X-Token: abc123');
     });
 
-    test('toObject() includes disabled entries', () => {
+    test('toObject() skips disabled entries by default', () => {
       const { list } = createWithDisabled();
-      expect(list.toObject()).toEqual({ 'X-Token': 'abc123', 'x-off': 'hidden' });
+      expect(list.toObject()).toEqual({ 'X-Token': 'abc123' });
     });
 
-    test('toObject() lets an enabled entry win over a disabled one with the same key, in any order', () => {
+    test('toObject(false) includes disabled entries', () => {
+      const { list } = createWithDisabled();
+      expect(list.toObject(false)).toEqual({ 'X-Token': 'abc123', 'x-off': 'hidden' });
+    });
+
+    test('toObject(false) lets an enabled entry win over a disabled one with the same key, in any order', () => {
       const request = {
         headers: { 'x-tenant': 'acme' },
         headerEntries: [
@@ -185,10 +190,10 @@ describe('GrpcMetadataList', () => {
         ]
       };
       const list = new GrpcMetadataList(request, { writable: true });
-      expect(list.toObject()).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
+      expect(list.toObject(false)).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
 
       request.headerEntries.reverse();
-      expect(list.toObject()).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
+      expect(list.toObject(false)).toEqual({ 'x-tenant': 'acme', 'x-debug': '1' });
     });
 
     test('toObject(excludeDisabled) skips disabled entries', () => {

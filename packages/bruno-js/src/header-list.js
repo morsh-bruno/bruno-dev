@@ -93,6 +93,7 @@ const {
  */
 class HeaderList extends ReadOnlyPropertyList {
   #req;
+  #writable;
 
   /**
    * @param {object} source - Request config (writable, dynamic mode) or response object
@@ -103,7 +104,6 @@ class HeaderList extends ReadOnlyPropertyList {
   constructor(source, { writable = true } = {}) {
     super({
       caseInsensitiveKeys: true,
-      writable,
       // Writable: every read reconciles req.headers into req.headerEntries and hands out copies,
       // so `one(k).disabled = true` on the result cannot bypass the write methods.
       // Read-only: static snapshot of response headers.
@@ -112,10 +112,13 @@ class HeaderList extends ReadOnlyPropertyList {
         : { items: snapshotHeaderEntries(source?.headers) })
     });
     this.#req = writable ? source : null;
+    this.#writable = writable;
   }
 
-  _readOnlyMessage() {
-    return 'HeaderList is read-only (response headers cannot be modified)';
+  #assertWritable() {
+    if (!this.#writable) {
+      throw new Error('HeaderList is read-only (response headers cannot be modified)');
+    }
   }
 
   /**
@@ -209,7 +212,7 @@ class HeaderList extends ReadOnlyPropertyList {
    * @returns {boolean|null} `true` if added, `false` if updated, `null` if input was nil
    */
   upsert(itemOrName, value) {
-    this._assertWritable('upsert');
+    this.#assertWritable();
     let item = itemOrName;
     if (typeof itemOrName === 'string') {
       item = { key: itemOrName, value };
@@ -262,7 +265,7 @@ class HeaderList extends ReadOnlyPropertyList {
    * @param {*} [context] - Bind `this` for function predicates
    */
   remove(predicate, context) {
-    this._assertWritable('remove');
+    this.#assertWritable();
     let matches;
     if (typeof predicate === 'function') {
       matches = this._bind(predicate, context);
@@ -281,7 +284,7 @@ class HeaderList extends ReadOnlyPropertyList {
    * Remove all headers (enabled and disabled) from the request.
    */
   clear() {
-    this._assertWritable('clear');
+    this.#assertWritable();
     this.#removeWhere(() => true);
     this.#project();
   }
@@ -298,7 +301,7 @@ class HeaderList extends ReadOnlyPropertyList {
    * @param {Array|string} items
    */
   populate(items) {
-    this._assertWritable('populate');
+    this.#assertWritable();
     if (typeof items === 'string') {
       const lines = items.split(/\r?\n/).filter((l) => l.trim());
       for (const line of lines) {
@@ -332,7 +335,7 @@ class HeaderList extends ReadOnlyPropertyList {
    * @param {boolean} [prune=false] - If true, remove items not present in source after merging
    */
   assimilate(source, prune) {
-    this._assertWritable('assimilate');
+    this.#assertWritable();
     let items;
     if (ReadOnlyPropertyList.isPropertyList(source)) {
       items = source.all();

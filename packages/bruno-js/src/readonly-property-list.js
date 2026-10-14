@@ -8,7 +8,7 @@
  * Items are plain objects with a configurable key property (keyProperty) and value property (valueProperty).
  *
  * This base class provides only read/search/iteration/transform methods, plus opt-in knobs
- * subclasses share: case-insensitive key matching, iterator context binding and a writable guard.
+ * subclasses share: case-insensitive key matching and iterator context binding.
  *
  * Class hierarchy (every list extends the base directly):
  *   ReadOnlyPropertyList   (read-only, both modes)
@@ -32,7 +32,6 @@ class ReadOnlyPropertyList {
    * @param {Array} [options.items] - Initial items for static mode
    * @param {Function} [options.dataSource] - Dynamic data source function (returns array of items)
    * @param {boolean} [options.caseInsensitiveKeys=false] - Key match rule for get/one/has/indexOf
-   * @param {boolean} [options.writable=true] - Consulted by _assertWritable()
    */
   // Items are stored in an array (not a Map) to support positional access (idx, indexOf)
   // and duplicate keys. At typical list sizes (cookies, headers) the O(n) key lookup is negligible.
@@ -41,13 +40,11 @@ class ReadOnlyPropertyList {
     valueProperty = 'value',
     items,
     dataSource,
-    caseInsensitiveKeys = false,
-    writable = true
+    caseInsensitiveKeys = false
   } = {}) {
     this._keyProperty = keyProperty;
     this._valueProperty = valueProperty;
     this._caseInsensitiveKeys = caseInsensitiveKeys;
-    this._writable = writable;
     this._dynamic = typeof dataSource === 'function';
     if (this._dynamic) {
       this.#dataSource = dataSource;
@@ -86,25 +83,6 @@ class ReadOnlyPropertyList {
    */
   _bind(fn, context) {
     return context !== undefined ? fn.bind(context) : fn;
-  }
-
-  /**
-   * Throws when the list was constructed with `writable: false`.
-   * @param {string} method - Name of the calling method (for the error message)
-   */
-  _assertWritable(method) {
-    if (!this._writable) {
-      throw new Error(this._readOnlyMessage(method));
-    }
-  }
-
-  /**
-   * Error text for a write on a read-only list. Subclasses override to keep their pinned text.
-   * @param {string} method
-   * @returns {string}
-   */
-  _readOnlyMessage(method) {
-    return `${method}() is not available on a read-only list`;
   }
 
   // ── Retrieval ──────────────────────────────────────────────────────────
