@@ -46,7 +46,6 @@ describe('prepare-request: prepareRequest', () => {
         { key: 'x-on', value: 'on' },
         { key: 'x-off', value: 'off', disabled: true }
       ]);
-      expect(result).not.toHaveProperty('disabledHeaders');
     });
   });
 

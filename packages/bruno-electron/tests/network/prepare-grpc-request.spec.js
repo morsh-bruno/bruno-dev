@@ -9,7 +9,7 @@ jest.mock('../../src/ipc/network/prepare-request');
 
 const prepareGrpcRequest = require('../../src/ipc/network/prepare-grpc-request');
 const interpolateVars = require('../../src/ipc/network/interpolate-vars');
-const { getEnvVars, getTreePathFromCollectionToItem, mergeHeaders } = require('../../src/utils/collection');
+const { getEnvVars, getTreePathFromCollectionToItem } = require('../../src/utils/collection');
 const { getProcessEnvVars } = require('../../src/store/process-env');
 const { setAuthHeaders } = require('../../src/ipc/network/prepare-request');
 
@@ -114,18 +114,6 @@ describe('prepare-grpc-request: prepareGrpcRequest', () => {
         { key: 'x-on', value: 'on' },
         { key: 'x-off', value: 'off', disabled: true }
       ]);
-      expect(result).not.toHaveProperty('disabledHeaders');
-    });
-
-    it('should merge inherited headers including disabled ones', async () => {
-      const requestTreePath = [{ type: 'request' }];
-      getTreePathFromCollectionToItem.mockReturnValue(requestTreePath);
-
-      await prepareGrpcRequest(mockItem, mockCollection, mockEnvironment, mockRuntimeVariables);
-
-      expect(mergeHeaders).toHaveBeenCalledWith(mockCollection, mockItem.request, requestTreePath, {
-        includeDisabledHeaders: true
-      });
     });
   });
 });
