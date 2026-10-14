@@ -52,7 +52,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
   // ── Write methods (edit the entries, then project into the headers map) ──
 
   /**
-   * Insert a key, or update it in place when it already exists under any casing.
+   * Insert a key, or update it in place when it already exists.
    *
    * @param {string} key
    * @param {*} value

@@ -97,20 +97,18 @@ describe('prepare-grpc-request: prepareGrpcRequest', () => {
       expect(result.headerEntries).toEqual([]);
     });
 
-    it('should keep one entry per enabled name and leave disabled headers out', async () => {
+    it('should keep one entry per enabled name', async () => {
       mockItem.request.headers = [
         { name: 'x-on', value: 'on', enabled: true },
         { name: 'x-off', value: 'off', enabled: false },
-        { name: '', value: 'nameless', enabled: false },
+        { name: '', value: 'nameless', enabled: true },
         { name: 'x-on', value: 'last-wins', enabled: true }
       ];
 
       const result = await prepareGrpcRequest(mockItem, mockCollection, mockEnvironment, mockRuntimeVariables);
 
       expect(result.headers).toEqual({ 'x-on': 'last-wins' });
-      expect(result.headerEntries).toEqual([
-        { key: 'x-on', value: 'last-wins' }
-      ]);
+      expect(result.headerEntries).toEqual([{ key: 'x-on', value: 'last-wins' }]);
     });
   });
 });
