@@ -42,7 +42,7 @@ describe('prepare-request: prepareRequest', () => {
   });
 
   describe('Header entries', () => {
-    it('Should emit headerEntries in row order with disabled rows flagged, and headers from the enabled rows', async () => {
+    it('Should emit headerEntries in row order with disabled rows flagged, and one entry per enabled name', async () => {
       const request = {
         method: 'GET',
         url: 'test-domain',
@@ -59,9 +59,8 @@ describe('prepare-request: prepareRequest', () => {
       expect(result.headers['x-on']).toBe('last-wins');
       expect(result.headers).not.toHaveProperty('x-off');
       expect(result.headerEntries).toEqual([
-        { key: 'x-on', value: 'on' },
-        { key: 'x-off', value: 'off', disabled: true },
-        { key: 'x-on', value: 'last-wins' }
+        { key: 'x-on', value: 'last-wins' },
+        { key: 'x-off', value: 'off', disabled: true }
       ]);
     });
   });

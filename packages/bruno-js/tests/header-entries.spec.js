@@ -1,4 +1,5 @@
 const {
+  buildHeaderEntries,
   reconcileHeaderEntries,
   projectHeaderEntries,
   liveHeaderEntries,
@@ -6,6 +7,72 @@ const {
 } = require('../src/utils/header-entries');
 
 describe('header entries', () => {
+  describe('buildHeaderEntries (rows → both views)', () => {
+    test('keeps row order, flags disabled rows, and projects only enabled rows', () => {
+      const { headers, headerEntries } = buildHeaderEntries([
+        { name: 'x-on', value: 'on', enabled: true },
+        { name: 'x-off', value: 'off', enabled: false }
+      ]);
+      expect(headers).toEqual({ 'x-on': 'on' });
+      expect(headerEntries).toEqual([
+        { key: 'x-on', value: 'on' },
+        { key: 'x-off', value: 'off', disabled: true }
+      ]);
+    });
+
+    test('skips rows without a name', () => {
+      const { headers, headerEntries } = buildHeaderEntries([
+        { name: '', value: 'a', enabled: true },
+        { value: 'b', enabled: false },
+        null
+      ]);
+      expect(headers).toEqual({});
+      expect(headerEntries).toEqual([]);
+    });
+
+    test('a name enabled twice gets one entry, at its first position with its last value', () => {
+      const { headers, headerEntries } = buildHeaderEntries([
+        { name: 'x-dup', value: 'first', enabled: true },
+        { name: 'x-other', value: 'o', enabled: true },
+        { name: 'x-dup', value: 'last', enabled: true }
+      ]);
+      expect(headers).toEqual({ 'x-dup': 'last', 'x-other': 'o' });
+      expect(Object.keys(headers)).toEqual(['x-dup', 'x-other']);
+      expect(headerEntries).toEqual([
+        { key: 'x-dup', value: 'last' },
+        { key: 'x-other', value: 'o' }
+      ]);
+    });
+
+    test('keeps a disabled row beside an enabled row of the same name', () => {
+      const { headerEntries } = buildHeaderEntries([
+        { name: 'x', value: 'old', enabled: false },
+        { name: 'x', value: 'live', enabled: true }
+      ]);
+      expect(headerEntries).toEqual([
+        { key: 'x', value: 'old', disabled: true },
+        { key: 'x', value: 'live' }
+      ]);
+    });
+
+    test('compares names exactly: two casings stay two entries', () => {
+      const { headers, headerEntries } = buildHeaderEntries([
+        { name: 'X-Token', value: 'a', enabled: true },
+        { name: 'x-token', value: 'b', enabled: true }
+      ]);
+      expect(headers).toEqual({ 'X-Token': 'a', 'x-token': 'b' });
+      expect(headerEntries).toEqual([
+        { key: 'X-Token', value: 'a' },
+        { key: 'x-token', value: 'b' }
+      ]);
+    });
+
+    test('anything but an array builds empty views', () => {
+      expect(buildHeaderEntries(undefined)).toEqual({ headers: {}, headerEntries: [] });
+      expect(buildHeaderEntries(null)).toEqual({ headers: {}, headerEntries: [] });
+    });
+  });
+
   describe('reconcileHeaderEntries (object → entries)', () => {
     test('removes enabled entries whose key left the object', () => {
       const entries = [{ key: 'A', value: '1' }, { key: 'B', value: '2' }];

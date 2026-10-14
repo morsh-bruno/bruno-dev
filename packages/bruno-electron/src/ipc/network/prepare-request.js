@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const { getTreePathFromCollectionToItem, mergeHeaders, mergeScripts, mergeVars, getFormattedCollectionOauth2Credentials, mergeAuth } = require('../../utils/collection');
 const { getEffectiveTags, getOwnTags, getInheritedTagsFromTreePath } = require('@usebruno/common');
+const { buildHeaderEntries } = require('@usebruno/js');
 const path = require('node:path');
 const { isLargeFile } = require('../../utils/filesystem');
 
@@ -381,7 +382,6 @@ const prepareRequest = async (item, collection = {}, abortController) => {
   const settings = item.draft?.settings ?? item.settings;
   const collectionRoot = collection?.draft?.root ? get(collection, 'draft.root', {}) : get(collection, 'root', {});
   const collectionPath = collection?.pathname;
-  const headers = {};
   let contentTypeDefined = false;
   let url = request.url;
 
@@ -404,21 +404,10 @@ const prepareRequest = async (item, collection = {}, abortController) => {
     request.promptVariables = collection?.promptVariables || {};
   }
 
-  const headerEntries = [];
-  each(get(request, 'headers', []), (h) => {
-    if (!(h.name?.length > 0)) {
-      return;
-    }
-    if (h.enabled) {
-      headers[h.name] = h.value;
-      headerEntries.push({ key: h.name, value: h.value });
-      if (h.name.toLowerCase() === 'content-type') {
-        contentTypeDefined = true;
-      }
-    } else {
-      headerEntries.push({ key: h.name, value: h.value, disabled: true });
-    }
-  });
+  const { headers, headerEntries } = buildHeaderEntries(get(request, 'headers', []));
+  if (Object.keys(headers).some((name) => name.toLowerCase() === 'content-type')) {
+    contentTypeDefined = true;
+  }
 
   let axiosRequest = {
     mode: request.body.mode,
