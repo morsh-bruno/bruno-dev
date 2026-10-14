@@ -1,6 +1,5 @@
 const ReadOnlyPropertyList = require('../readonly-property-list');
 const {
-  headerEntriesToObject,
   liveHeaderEntries,
   orderedHeaderEntries,
   projectHeaderEntries,
@@ -41,12 +40,11 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
     }
   }
 
-  // ── Transform override ───────────────────────────────────────────────
+  // ── Transform override ────────────────────────────────────────────────
 
   /** `key: value` per line — how metadata travels as HTTP/2 headers. */
   toString() {
     return this.all()
-      .filter((entry) => !entry.disabled)
       .map((entry) => `${entry.key}: ${entry.value}`)
       .join('\n');
   }
@@ -54,8 +52,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
   // ── Write methods (edit the entries, then project into the headers map) ──
 
   /**
-   * Insert a key, or update it in place when it already exists under any casing. The key ends
-   * up enabled.
+   * Insert a key, or update it in place when it already exists under any casing.
    *
    * @param {string} key
    * @param {*} value
@@ -67,85 +64,61 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
       return;
     }
 
-    this.#write({ key, value, disabled: false });
+    const entries = liveHeaderEntries(this.#request);
+    const firstMatch = entries.find((entry) => this._keyMatches(entry.key, key));
+    if (firstMatch && firstMatch.key !== key) {
+      entries.splice(entries.indexOf(firstMatch), 1);
+    }
+
+    const existing = entries.find((entry) => entry.key === key);
+    if (existing) {
+      existing.value = value;
+    } else {
+      entries.push({ key, value });
+    }
+
+    projectHeaderEntries(entries, this.#request.headers);
   }
 
   /**
-   * Upsert an entry from the `{ key, value, disabled? }` shape `all()` returns, so an entry read
-   * from one list can be handed straight to another.
+   * Upsert an entry from the `{ key, value }` shape `all()` returns, so an entry read from one list
+   * can be handed straight to another.
    *
    * @param {object} item
    */
   add(item) {
     this.#assertWritable('add');
 
-    if (!item || typeof item !== 'object' || typeof item.key !== 'string' || !item.key.length) {
+    if (!item || typeof item !== 'object') {
       return;
     }
 
-    this.#write({ key: item.key, value: item.value, disabled: item.disabled === true });
+    this.upsert(item.key, item.value);
   }
 
   /**
-   * Remove the entry with the given key, enabled or disabled.
+   * Remove the entry with the given key.
    * @param {string} key
    */
   remove(key) {
     this.#assertWritable('remove');
 
     const entries = liveHeaderEntries(this.#request);
-
-    for (let i = entries.length - 1; i >= 0; i--) {
-      if (this._keyMatches(entries[i].key, key)) {
-        entries.splice(i, 1);
-      }
+    const index = entries.findIndex((entry) => this._keyMatches(entry.key, key));
+    if (index !== -1) {
+      entries.splice(index, 1);
     }
 
     projectHeaderEntries(entries, this.#request.headers);
   }
 
-  /** Remove every entry, enabled and disabled. */
+  /** Remove every entry. */
   clear() {
     this.#assertWritable('clear');
 
     const entries = liveHeaderEntries(this.#request);
 
-    // Emptied in place rather than reassigned: the request owns the array.
     entries.length = 0;
-
-    projectHeaderEntries(entries, this.#request.headers);
-  }
-
-  /**
-   * Convert to a plain object. Matches Postman's PropertyList.toObject() signature; an enabled
-   * entry always wins over a disabled one with the same key.
-   * @param {boolean} [excludeDisabled=true] - If true, skip disabled entries
-   * @param {boolean} [caseSensitive=true] - If false, lowercase all keys
-   * @param {boolean} [multiValue=false] - If true, only the first value of a duplicate key is kept
-   * @param {boolean} [sanitizeKeys=false] - If true, skip entries with falsy keys
-   * @returns {object}
-   */
-  toObject(excludeDisabled = true, caseSensitive, multiValue, sanitizeKeys) {
-    return headerEntriesToObject(this.all(), excludeDisabled, caseSensitive, multiValue, sanitizeKeys);
-  }
-
-  #write({ key, value, disabled }) {
-    const entries = liveHeaderEntries(this.#request);
-    // A server reads `X-Token` and `x-token` as one key, so a re-cased write replaces in place
-    // instead of leaving two entries the transport would send as duplicates.
-    const existing = entries.find((entry) => this._keyMatches(entry.key, key));
-
-    if (existing) {
-      existing.key = key;
-      existing.value = value;
-      if (disabled) {
-        existing.disabled = true;
-      } else {
-        delete existing.disabled;
-      }
-    } else {
-      entries.push(disabled ? { key, value, disabled: true } : { key, value });
-    }
 
     projectHeaderEntries(entries, this.#request.headers);
   }

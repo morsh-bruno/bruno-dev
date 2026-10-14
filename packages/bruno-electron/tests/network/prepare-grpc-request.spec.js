@@ -94,13 +94,10 @@ describe('prepare-grpc-request: prepareGrpcRequest', () => {
       const result = await prepareGrpcRequest(mockItem, mockCollection, mockEnvironment, mockRuntimeVariables);
 
       expect(result.headers).toEqual({});
-      expect(result.headerEntries).toEqual([
-        { key: 'content-type', value: 'application/grpc', disabled: true },
-        { key: 'authorization', value: 'Bearer token123', disabled: true }
-      ]);
+      expect(result.headerEntries).toEqual([]);
     });
 
-    it('should keep enabled and disabled headers apart, with one entry per enabled name', async () => {
+    it('should keep one entry per enabled name and leave disabled headers out', async () => {
       mockItem.request.headers = [
         { name: 'x-on', value: 'on', enabled: true },
         { name: 'x-off', value: 'off', enabled: false },
@@ -112,8 +109,7 @@ describe('prepare-grpc-request: prepareGrpcRequest', () => {
 
       expect(result.headers).toEqual({ 'x-on': 'last-wins' });
       expect(result.headerEntries).toEqual([
-        { key: 'x-on', value: 'last-wins' },
-        { key: 'x-off', value: 'off', disabled: true }
+        { key: 'x-on', value: 'last-wins' }
       ]);
     });
   });

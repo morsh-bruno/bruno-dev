@@ -58,58 +58,13 @@ describe('BrunoGrpcRequest', () => {
 
       expect(raw.headers).toEqual({ 'x-token': 'from-hook' });
     });
-  });
-
-  describe('disabled metadata', () => {
-    const withDisabled = () => makeReq({
-      headerEntries: [
-        { key: 'X-Token', value: 'authored' },
-        { key: 'x-off', value: 'hidden', disabled: true }
-      ]
-    });
-
-    test('disabled entries surface with disabled: true, ahead of the enabled ones', () => {
-      const req = new BrunoGrpcRequest(withDisabled());
-
-      expect(req.metadata.all()).toEqual([
-        { key: 'x-off', value: 'hidden', disabled: true },
-        { key: 'X-Token', value: 'authored' }
-      ]);
-      expect(req.metadata.idx(1)).toEqual(req.metadata.all()[1]);
-    });
-
-    test('a request without headerEntries gets them on the first disabled write', () => {
-      const raw = makeReq();
-      const req = new BrunoGrpcRequest(raw, { metadataWritable: true });
-
-      req.metadata.add({ key: 'x-token', value: 'off', disabled: true });
-
-      expect(raw.headers).toEqual({});
-      expect(raw.headerEntries).toEqual([{ key: 'x-token', value: 'off', disabled: true }]);
-    });
-
-    test('remove() and clear() reach the disabled entries of the underlying request', () => {
-      const raw = withDisabled();
-      raw.headerEntries.push({ key: 'x-gone', value: '1', disabled: true });
-      const req = new BrunoGrpcRequest(raw, { metadataWritable: true });
-
-      req.metadata.remove('X-GONE');
-      expect(raw.headerEntries).toEqual([
-        { key: 'X-Token', value: 'authored' },
-        { key: 'x-off', value: 'hidden', disabled: true }
-      ]);
-
-      req.metadata.clear();
-      expect(raw.headers).toEqual({});
-      expect(raw.headerEntries).toEqual([]);
-    });
 
     test('a header added to the map after the entries were built shows up appended', () => {
-      const raw = withDisabled();
+      const raw = makeReq({ headerEntries: [{ key: 'X-Token', value: 'authored' }] });
       raw.headers.Authorization = 'Bearer x';
       const req = new BrunoGrpcRequest(raw);
 
-      expect(req.metadata.map((entry) => entry.key)).toEqual(['x-off', 'X-Token', 'Authorization']);
+      expect(req.metadata.map((entry) => entry.key)).toEqual(['X-Token', 'Authorization']);
     });
   });
 
