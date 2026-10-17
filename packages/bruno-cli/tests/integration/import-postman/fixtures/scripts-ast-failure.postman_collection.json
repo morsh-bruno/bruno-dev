@@ -1,0 +1,36 @@
+{
+  "info": {
+    "_postman_id": "6f1c2d3e-0000-4000-8000-000000000002",
+    "name": "AST Failure Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Broken Script",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.environment.set('token', 'abc');",
+              "pm.test('never closed', function () {",
+              "  pm.response.to.have.status(200);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://example.com/broken",
+          "protocol": "https",
+          "host": ["example", "com"],
+          "path": ["broken"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

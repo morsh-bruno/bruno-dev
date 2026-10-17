@@ -597,6 +597,24 @@ const safeWriteFileSync = (filePath, content) => {
 };
 
 /**
+ * Writes one environment to `<envDirPath>/<name>.<yml|bru>` and returns the path written.
+ * A collection import writes into a fresh directory and overwrites freely; the standalone
+ * environment import targets an existing collection and passes `overwrite: false` so a user's
+ * environment file is never replaced.
+ */
+const writeEnvironmentFile = (env, envDirPath, format, { overwrite = true } = {}) => {
+  const ext = format === 'bru' ? 'bru' : 'yml';
+  const filePath = path.join(envDirPath, sanitizeName(`${env.name}.${ext}`));
+
+  if (!overwrite && fs.existsSync(filePath)) {
+    throw new Error(`Environment file already exists: ${filePath}`);
+  }
+
+  fs.writeFileSync(filePath, stringifyEnvironment(env, { format }));
+  return filePath;
+};
+
+/**
  * Creates a Bruno collection directory structure from a Bruno collection object
  *
  * @param {Object} collection - The Bruno collection object
@@ -638,9 +656,7 @@ const createCollectionFromBrunoObject = async (collection, dirPath, options = {}
     fs.mkdirSync(envDirPath, { recursive: true });
 
     for (const env of collection.environments) {
-      const content = stringifyEnvironment(env, { format });
-      const filename = format === 'bru' ? sanitizeName(`${env.name}.bru`) : sanitizeName(`${env.name}.yml`);
-      fs.writeFileSync(path.join(envDirPath, filename), content);
+      writeEnvironmentFile(env, envDirPath, format);
     }
   }
 
@@ -703,7 +719,7 @@ const processCollectionItems = async (items = [], currentPath, options = {}) => 
         name: item.name,
         seq: typeof item.seq === 'number' ? item.seq : 1,
         tags: item.tags || [],
-        settings: {},
+        settings: item.settings || {},
         request: {
           method: item.request?.method || 'GET',
           url: item.request?.url || '',
@@ -731,6 +747,7 @@ const processCollectionItems = async (items = [], currentPath, options = {}) => 
 
 module.exports = {
   FORMAT_CONFIG,
+  REQUEST_ITEM_TYPES,
   getCollectionFormat,
   createCollectionJsonFromPathname,
   mergeHeaders,
@@ -741,6 +758,7 @@ module.exports = {
   getTreePathFromCollectionToItem,
   getEffectiveTagsByPathname,
   createCollectionFromBrunoObject,
+  writeEnvironmentFile,
   mergeAuth,
   getAllRequestsInFolder,
   getAllRequestsAtFolderRoot,
