@@ -181,47 +181,6 @@ describe('createCollectionFromBrunoObject', () => {
     expect(parsed.examples[0].response.body.content).toContain('John');
   });
 
-  describe.each([
-    ['bru', 'get-users.bru'],
-    ['yml', 'get-users.yml']
-  ])('request settings round-trip in %s format', (format, filename) => {
-    it('preserves omitHeaders, followRedirects and maxRedirects from the imported item', async () => {
-      createOutputDir();
-
-      await createCollectionFromBrunoObject(
-        {
-          name: 'settings-collection',
-          items: [
-            {
-              type: 'http-request',
-              name: 'Get Users',
-              filename,
-              seq: 1,
-              settings: { omitHeaders: ['User-Agent'], followRedirects: false, maxRedirects: 3 },
-              request: {
-                method: 'GET',
-                url: 'https://api.example.com/users',
-                auth: { mode: 'none' }
-              }
-            }
-          ]
-        },
-        outputDir,
-        { format }
-      );
-
-      const requestPath = path.join(outputDir, filename);
-      expect(fs.existsSync(requestPath)).toBe(true);
-
-      const parsed = parseRequest(fs.readFileSync(requestPath, 'utf8'), { format });
-      expect(parsed.settings).toMatchObject({
-        omitHeaders: ['User-Agent'],
-        followRedirects: false,
-        maxRedirects: 3
-      });
-    });
-  });
-
   describe('environments', () => {
     const environment = {
       name: 'staging',

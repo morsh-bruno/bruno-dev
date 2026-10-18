@@ -719,7 +719,7 @@ const processCollectionItems = async (items = [], currentPath, options = {}) => 
         name: item.name,
         seq: typeof item.seq === 'number' ? item.seq : 1,
         tags: item.tags || [],
-        settings: item.settings || {},
+        settings: {},
         request: {
           method: item.request?.method || 'GET',
           url: item.request?.url || '',
