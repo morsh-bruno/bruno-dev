@@ -13,6 +13,8 @@ export {
 export type { TaggedTreeNode, InheritedTagSource } from './tags';
 export { transformExampleStatusInCollection } from './example-status';
 export { sortByNameThenSequence, resolveCollectionVersion } from './collection';
+export { coerceEnvName, getDuplicateSecretNames, dedupeImportedSecrets } from './environments';
+export type { SecretNamedVariable, ImportedEnvironmentVariable } from './environments';
 export { normalizeOpenApiSyncConfigs } from './openapi-sync';
 
 export { generateApiDocsHtml, getApiDocsFileName, filterRequestItemsByTags } from './api-docs';

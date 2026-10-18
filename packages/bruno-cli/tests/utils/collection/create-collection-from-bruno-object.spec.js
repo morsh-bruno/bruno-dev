@@ -2,8 +2,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { describe, it, expect, afterEach } = require('@jest/globals');
-const { parseRequest, parseFolder } = require('@usebruno/filestore');
-const { createCollectionFromBrunoObject } = require('../../../src/utils/collection');
+const { parseRequest, parseFolder, parseEnvironment } = require('@usebruno/filestore');
+const { createCollectionFromBrunoObject, writeEnvironmentFile } = require('../../../src/utils/collection');
 
 describe('createCollectionFromBrunoObject', () => {
   let outputDir;
@@ -179,6 +179,46 @@ describe('createCollectionFromBrunoObject', () => {
     expect(parsed.examples[0].name).toBe('Success Response');
     expect(Number(parsed.examples[0].response.status)).toBe(200);
     expect(parsed.examples[0].response.body.content).toContain('John');
+  });
+
+  describe('environments', () => {
+    const environment = {
+      name: 'staging',
+      variables: [
+        { uid: 'v1', name: 'baseUrl', value: 'https://staging.example.com', type: 'text', enabled: true, secret: false },
+        { uid: 'v2', name: 'apiKey', value: 'secret', type: 'text', enabled: true, secret: true },
+        { uid: 'v3', name: 'debug', value: 'true', type: 'text', enabled: false, secret: false }
+      ]
+    };
+
+    it('writes collection environments through writeEnvironmentFile', async () => {
+      createOutputDir();
+
+      await createCollectionFromBrunoObject({ name: 'env-collection', items: [], environments: [environment] }, outputDir, { format: 'yml' });
+
+      const envPath = path.join(outputDir, 'environments', 'staging.yml');
+      expect(fs.existsSync(envPath)).toBe(true);
+
+      const parsed = parseEnvironment(fs.readFileSync(envPath, 'utf8'), { format: 'yml' });
+      expect(parsed.variables.map(({ name, enabled, secret }) => ({ name, enabled, secret }))).toEqual([
+        { name: 'baseUrl', enabled: true, secret: false },
+        { name: 'apiKey', enabled: true, secret: true },
+        { name: 'debug', enabled: false, secret: false }
+      ]);
+    });
+
+    it('overwrites by default and refuses when told not to', () => {
+      createOutputDir();
+
+      const first = writeEnvironmentFile(environment, outputDir, 'bru');
+      expect(first).toBe(path.join(outputDir, 'staging.bru'));
+
+      expect(() => writeEnvironmentFile(environment, outputDir, 'bru')).not.toThrow();
+      expect(() => writeEnvironmentFile(environment, outputDir, 'bru', { overwrite: false })).toThrow(
+        `Environment file already exists: ${first}`
+      );
+      expect(writeEnvironmentFile(environment, outputDir, 'yml', { overwrite: false })).toBe(path.join(outputDir, 'staging.yml'));
+    });
   });
 
   it('throws for unsupported item types', async () => {

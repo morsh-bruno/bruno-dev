@@ -200,10 +200,27 @@ const constructUrl = (url) => {
   return '';
 };
 
-const translateOrPreserve = (exec, preserveScripts) =>
-  preserveScripts ? (Array.isArray(exec) ? exec.join('\n') : exec) : postmanTranslation(exec);
+const FALLBACK_DESCRIPTIONS = {
+  regex: 'regex replacement',
+  verbatim: 'the original Postman script'
+};
 
-const importScriptsFromEvents = (events, requestObject, preserveScripts = false) => {
+/**
+ * Builds the `onTranslationFailure` callback for one item: each AST-translation failure lands in
+ * `translationIssues` under the item's path, in the same shape as `issues` entries.
+ */
+const translationIssueReporter = (translationIssues, path) => ({ message, fallback }) => {
+  translationIssues.push({
+    path,
+    severity: 'warning',
+    message: `Script translation fell back to ${FALLBACK_DESCRIPTIONS[fallback]}: ${message}`
+  });
+};
+
+const translateOrPreserve = (exec, preserveScripts, onTranslationFailure) =>
+  preserveScripts ? (Array.isArray(exec) ? exec.join('\n') : exec) : postmanTranslation(exec, { onTranslationFailure });
+
+const importScriptsFromEvents = (events, requestObject, preserveScripts = false, onTranslationFailure) => {
   events.forEach((event) => {
     if (event.script && event.script.exec) {
       if (event.listen === 'prerequest') {
@@ -212,7 +229,7 @@ const importScriptsFromEvents = (events, requestObject, preserveScripts = false)
         }
 
         if (event.script.exec && event.script.exec.length > 0) {
-          requestObject.script.req = translateOrPreserve(event.script.exec, preserveScripts);
+          requestObject.script.req = translateOrPreserve(event.script.exec, preserveScripts, onTranslationFailure);
         } else {
           requestObject.script.req = '';
           console.warn('Unexpected event.script.exec type', typeof event.script.exec);
@@ -225,7 +242,7 @@ const importScriptsFromEvents = (events, requestObject, preserveScripts = false)
         }
 
         if (event.script.exec && event.script.exec.length > 0) {
-          requestObject.script.res = translateOrPreserve(event.script.exec, preserveScripts);
+          requestObject.script.res = translateOrPreserve(event.script.exec, preserveScripts, onTranslationFailure);
         } else {
           requestObject.script.res = '';
           console.warn('Unexpected event.script.exec type', typeof event.script.exec);
@@ -459,7 +476,7 @@ export const processAuth = (auth, requestObject, isCollection = false) => {
   }
 };
 
-const importPostmanV2CollectionItem = (brunoParent, item, { preserveScripts = false } = {}, scriptMap, issues = [], parentPath = '') => {
+const importPostmanV2CollectionItem = (brunoParent, item, { preserveScripts = false, translationIssues = [] } = {}, scriptMap, issues = [], parentPath = '') => {
   brunoParent.items = brunoParent.items || [];
   const folderMap = {};
   const requestMap = {};
@@ -520,7 +537,7 @@ const importPostmanV2CollectionItem = (brunoParent, item, { preserveScripts = fa
       processAuth(i.auth, brunoFolderItem.root.request);
 
       if (i.item && i.item.length) {
-        importPostmanV2CollectionItem(brunoFolderItem, i.item, { preserveScripts }, scriptMap, issues, itemPath);
+        importPostmanV2CollectionItem(brunoFolderItem, i.item, { preserveScripts, translationIssues }, scriptMap, issues, itemPath);
       }
 
       if (i.event) {
@@ -530,7 +547,7 @@ const importPostmanV2CollectionItem = (brunoParent, item, { preserveScripts = fa
             request: brunoFolderItem.root.request
           });
         } else {
-          importScriptsFromEvents(i.event, brunoFolderItem.root.request, preserveScripts);
+          importScriptsFromEvents(i.event, brunoFolderItem.root.request, preserveScripts, translationIssueReporter(translationIssues, itemPath));
         }
       }
 
@@ -633,13 +650,14 @@ const importPostmanV2CollectionItem = (brunoParent, item, { preserveScripts = fa
               request: brunoRequestItem.request
             });
           } else {
+            const onTranslationFailure = translationIssueReporter(translationIssues, itemPath);
             i.event.forEach((event) => {
               if (event.listen === 'prerequest' && event.script && event.script.exec) {
                 if (!brunoRequestItem.request?.script) {
                   brunoRequestItem.request.script = {};
                 }
                 if (event.script.exec && event.script.exec.length > 0) {
-                  brunoRequestItem.request.script.req = translateOrPreserve(event.script.exec, preserveScripts);
+                  brunoRequestItem.request.script.req = translateOrPreserve(event.script.exec, preserveScripts, onTranslationFailure);
                 } else {
                   brunoRequestItem.request.script.req = '';
                   console.warn('Unexpected event.script.exec type', typeof event.script.exec);
@@ -650,7 +668,7 @@ const importPostmanV2CollectionItem = (brunoParent, item, { preserveScripts = fa
                   brunoRequestItem.request.script = {};
                 }
                 if (event.script.exec && event.script.exec.length > 0) {
-                  brunoRequestItem.request.script.res = translateOrPreserve(event.script.exec, preserveScripts);
+                  brunoRequestItem.request.script.res = translateOrPreserve(event.script.exec, preserveScripts, onTranslationFailure);
                 } else {
                   brunoRequestItem.request.script.res = '';
                   console.warn('Unexpected event.script.exec type', typeof event.script.exec);
@@ -1103,11 +1121,14 @@ const importPostmanV2Collection = async (collection, { useWorkers = false, prese
     }
   };
 
-  if (collection.event) {
-    importScriptsFromEvents(collection.event, brunoCollection.root.request, preserveScripts);
-  }
-
+  // `issues` is what the app shows; `translationIssues` holds AST-translation fallbacks separately
+  // so adding them never changes the app's skipped/warning counts.
   const issues = [];
+  const translationIssues = [];
+
+  if (collection.event) {
+    importScriptsFromEvents(collection.event, brunoCollection.root.request, preserveScripts, translationIssueReporter(translationIssues, 'Collection'));
+  }
 
   if (collection?.variable) {
     try {
@@ -1123,7 +1144,7 @@ const importPostmanV2Collection = async (collection, { useWorkers = false, prese
   // Create a single scriptMap for all items
   const scriptMap = useWorkers && !preserveScripts ? new Map() : null;
 
-  importPostmanV2CollectionItem(brunoCollection, collection.item, { preserveScripts }, scriptMap, issues);
+  importPostmanV2CollectionItem(brunoCollection, collection.item, { preserveScripts, translationIssues }, scriptMap, issues);
 
   // Process all scripts in a single call at the top level
   if (useWorkers && scriptMap && scriptMap.size > 0) {
@@ -1182,7 +1203,7 @@ const importPostmanV2Collection = async (collection, { useWorkers = false, prese
     }
   }
 
-  return { collection: brunoCollection, issues };
+  return { collection: brunoCollection, issues, translationIssues };
 };
 
 const parsePostmanCollection = async (collection, { useWorkers = false, preserveScripts = false }) => {
@@ -1205,12 +1226,11 @@ const parsePostmanCollection = async (collection, { useWorkers = false, preserve
 
     throw new Error('Unsupported Postman schema version. Only Postman Collection v2.0 and v2.1 are supported.');
   } catch (err) {
-    console.log(err);
     if (err instanceof Error) {
       throw err;
     }
 
-    throw new Error('Invalid Postman collection format. Please check your JSON file.');
+    throw new Error('Invalid Postman collection format. Please check your JSON file.', { cause: err });
   }
 };
 
@@ -1223,7 +1243,7 @@ const postmanToBruno = async (postmanCollection, { useWorkers = false, preserveS
       : postmanCollection;
     const rawPackages = collectPackagesFromPostmanCollection(rawCollectionForScan);
 
-    const { collection: parsedCollection, issues } = await parsePostmanCollection(postmanCollection, { useWorkers, preserveScripts });
+    const { collection: parsedCollection, issues, translationIssues } = await parsePostmanCollection(postmanCollection, { useWorkers, preserveScripts });
     const transformedCollection = transformItemsInCollection(parsedCollection);
     const hydratedCollection = hydrateSeqInCollection(transformedCollection);
     // Apply backward compatibility transformation for string status to number
@@ -1240,10 +1260,10 @@ const postmanToBruno = async (postmanCollection, { useWorkers = false, preserveS
     const injectedPackages = preserveScripts ? [] : rewriteRequiresInBrunoCollection(validatedCollection);
     validatedCollection.packageReport = buildPackageReport([...rawPackages, ...injectedPackages]);
 
-    return { collection: validatedCollection, issues };
+    return { collection: validatedCollection, issues, translationIssues };
   } catch (err) {
-    console.log(err);
-    throw new Error(`Import collection failed: ${err.message}`);
+    // Callers log the thrown error themselves; `cause` keeps the original stack reachable there.
+    throw new Error(`Import collection failed: ${err.message}`, { cause: err });
   }
 };
 

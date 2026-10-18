@@ -186,7 +186,19 @@ const processRegexReplacement = (code) => {
   return code;
 };
 
-const postmanTranslation = (script) => {
+// Babel errors carry a code frame after the first line; only the first line names the problem.
+const firstLine = (message) => String(message ?? '').split('\n')[0];
+
+/**
+ * Translates a Postman script to Bruno's API. The AST translator is tried first; when it fails the
+ * script falls back to regex replacement, and failing that is kept verbatim. `onTranslationFailure`
+ * is told which fallback was used so callers can report degraded scripts without parsing the
+ * console output.
+ *
+ * @param {string|string[]} script
+ * @param {{ onTranslationFailure?: (failure: { message: string, fallback: 'regex' | 'verbatim' }) => void }} [options]
+ */
+const postmanTranslation = (script, { onTranslationFailure } = {}) => {
   let modifiedScript = Array.isArray(script) ? script.join('\n') : script;
   let translatedScript;
 
@@ -194,12 +206,19 @@ const postmanTranslation = (script) => {
     translatedScript = translateCode(modifiedScript);
   } catch (e) {
     console.warn('Error in postman translation:', e);
+    const message = firstLine(e?.message);
 
     try {
       translatedScript = processRegexReplacement(modifiedScript);
+      if (onTranslationFailure) {
+        onTranslationFailure({ message, fallback: 'regex' });
+      }
     } catch (e) {
       console.warn('Error in postman translation:', e);
       translatedScript = modifiedScript;
+      if (onTranslationFailure) {
+        onTranslationFailure({ message, fallback: 'verbatim' });
+      }
     }
   }
 
