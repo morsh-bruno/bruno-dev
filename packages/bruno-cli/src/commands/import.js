@@ -5,12 +5,12 @@ const chalk = require('chalk');
 const jsyaml = require('js-yaml');
 const axios = require('axios');
 const { openApiToBruno, wsdlToBruno, postmanToBruno, postmanToBrunoEnvironment } = require('@usebruno/converters');
+const { writeCollectionToDiskLegacy } = require('@usebruno/converters/io');
 const { coerceEnvName, dedupeImportedSecrets, generateUniqueName, sanitizeName, validateName, validateNameError } = require('@usebruno/common').utils;
 const { exists, isDirectory, canonicalPath } = require('../utils/filesystem');
 const { writeEnvironmentFile } = require('../utils/environment');
 const { getCollectionFormat } = require('../utils/collection');
 const { formatImportSummary, formatImportIssues, formatPackageReport, hasImportErrors } = require('../utils/import-report');
-const { writeCollectionToDiskLegacy } = require('@usebruno/filestore');
 
 const command = 'import <type>';
 const desc = 'Import a collection (OpenAPI, WSDL, Postman) or a Postman environment from other formats';
