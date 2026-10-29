@@ -34,7 +34,9 @@ playwright/           Test fixtures and helpers (index.ts)
 
 Build tool per package (matters for the "rebuild shared packages" step in `.claude/CLAUDE.md`):
 - **rollup** (emits `dist/cjs` + `dist/esm`): bruno-common, bruno-converters, bruno-requests,
-  bruno-query, bruno-graphql-docs; **bruno-filestore** additionally runs `tsc --emitDeclarationOnly`;
+  bruno-query, bruno-graphql-docs; **bruno-converters** also emits `dist/io/{cjs,esm}` for the
+  Node-only `@usebruno/converters/io` subpath (it needs bruno-filestore built first);
+  **bruno-filestore** additionally runs `tsc --emitDeclarationOnly`;
   **bruno-sqlite** additionally runs a codegen prepass (`npm run generate`) that compiles
   `migrations/*.ts` + `statements/*.sql` into the gitignored `src/generated/`.
 - **tsc only**: bruno-schema-types.

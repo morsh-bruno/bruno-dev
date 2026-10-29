@@ -12,6 +12,7 @@ const packageJson = require('./package.json');
 const externalDeps = [
   '@usebruno/common',
   '@usebruno/common/utils',
+  '@usebruno/filestore',
   '@usebruno/schema',
   '@usebruno/schema-types',
   /@usebruno\/schema-types\/.*/,
@@ -30,68 +31,67 @@ const externalDeps = [
   'xml2js',
   // Node built-ins
   'path',
-  'fs'
+  'fs',
+  'node:path',
+  'node:fs'
 ];
 
-module.exports = [
-  {
-    input: 'src/index.js',
-    output: {
-      dir: path.dirname(packageJson.main),
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named',
-      entryFileNames: 'index.js'
-    },
-    plugins: [
-      peerDepsExternal(),
-      nodeResolve({
-        extensions: ['.js', '.ts', '.tsx', '.json']
-      }),
-      commonjs(),
-      typescript({
-        tsconfig: './tsconfig.json',
-        sourceMap: true,
-        outDir: path.dirname(packageJson.main)
-      }),
-      terser({
-        maxWorkers: Math.max(1, os.availableParallelism())
-      }),
-      copy({
-        patterns: 'src/workers/scripts/**/*',
-        rootDir: '.'
-      })
-    ],
-    external: externalDeps
+// One config per entry and format, so rollup never shares a chunk between the main entry
+// (loaded by the renderer) and the fs-based io entry.
+const createBuildConfig = ({ input, outputDir, format, extraPlugins = [] }) => ({
+  input,
+  output: {
+    dir: outputDir,
+    format,
+    sourcemap: true,
+    exports: 'named',
+    entryFileNames: 'index.js'
   },
-  {
+  plugins: [
+    peerDepsExternal(),
+    nodeResolve({
+      extensions: ['.js', '.ts', '.tsx', '.json']
+    }),
+    commonjs(),
+    typescript({
+      tsconfig: './tsconfig.json',
+      sourceMap: true,
+      outDir: outputDir
+    }),
+    terser({
+      maxWorkers: Math.max(1, os.availableParallelism())
+    }),
+    ...extraPlugins
+  ],
+  external: externalDeps
+});
+
+const copyWorkerScripts = () => copy({
+  patterns: 'src/workers/scripts/**/*',
+  rootDir: '.'
+});
+
+module.exports = [
+  createBuildConfig({
     input: 'src/index.js',
-    output: {
-      dir: path.dirname(packageJson.module),
-      format: 'esm',
-      sourcemap: true,
-      exports: 'named',
-      entryFileNames: 'index.js'
-    },
-    plugins: [
-      peerDepsExternal(),
-      nodeResolve({
-        extensions: ['.js', '.ts', '.tsx', '.json']
-      }),
-      commonjs(),
-      typescript({
-        tsconfig: './tsconfig.json',
-        sourceMap: true,
-        outDir: path.dirname(packageJson.module)
-      }),
-      terser({
-        maxWorkers: Math.max(1, os.availableParallelism())
-      }),
-      copy({
-        patterns: 'src/workers/scripts/**/*',
-        rootDir: '.'
-      })
-    ],
-    external: externalDeps
-  }
+    outputDir: path.dirname(packageJson.main),
+    format: 'cjs',
+    extraPlugins: [copyWorkerScripts()]
+  }),
+  createBuildConfig({
+    input: 'src/index.js',
+    outputDir: path.dirname(packageJson.module),
+    format: 'esm',
+    extraPlugins: [copyWorkerScripts()]
+  }),
+  createBuildConfig({
+    input: 'src/io/index.ts',
+    outputDir: 'dist/io/cjs',
+    format: 'cjs'
+  }),
+  createBuildConfig({
+    input: 'src/io/index.ts',
+    outputDir: 'dist/io/esm',
+    format: 'esm'
+  })
 ];
