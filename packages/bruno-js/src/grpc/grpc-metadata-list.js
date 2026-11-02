@@ -1,30 +1,36 @@
 const ReadOnlyPropertyList = require('../readonly-property-list');
-const { setMetadataKey } = require('./grpc-metadata');
+const {
+  liveHeaderEntries,
+  orderedHeaderEntries,
+  projectHeaderEntries,
+  snapshotHeaderEntries
+} = require('../utils/header-entries');
 
-// Extends ReadOnlyPropertyList in dynamic mode: entries are read through the accessor (live headers) on every access.
 // Keep quickjs shim up to date on any updates to this class
 class GrpcMetadataList extends ReadOnlyPropertyList {
-  #readMetadata;
+  #request;
   #writable;
 
   /**
-   * @param {Function} readMetadata - Returns the `{ key: value }` map backing the list. A writable
-   *   list needs it to return the same live object every call, since that object is what writes edit.
+   * @param {object|Array} source - The prepared gRPC request (its `headers` and `headerEntries`
+   *   are the store, read live), or the `[{ name, value }]` rows of a response to snapshot.
    * @param {object} [options]
-   * @param {boolean} [options.writable=false] - When false, write methods throw
+   * @param {boolean} [options.writable=false] - When false, write methods throw. A snapshot is
+   *   never writable.
    */
-  constructor(readMetadata, { writable = false } = {}) {
+  constructor(source, { writable = false } = {}) {
+    const snapshot = !source || Array.isArray(source);
     super({
       keyProperty: 'key',
       valueProperty: 'value',
-      dataSource: () => Object.entries(readMetadata()).map(([key, value]) => ({ key, value }))
+      caseInsensitiveKeys: true,
+      ...(snapshot
+        ? { items: snapshotHeaderEntries(source) }
+        : { dataSource: () => orderedHeaderEntries(source) })
     });
-    this.#readMetadata = readMetadata;
-    this.#writable = writable;
+    this.#request = snapshot ? null : source;
+    this.#writable = writable && !snapshot;
   }
-
-  // Positional access is deliberately removed from ReadOnlyPropertyList.
-  idx = undefined;
 
   #assertWritable(method) {
     if (!this.#writable) {
@@ -32,104 +38,6 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
         `metadata.${method}() is not available once the call has been sent — change metadata in the beforeCallStart hook`
       );
     }
-  }
-
-  #findKey(name) {
-    if (typeof name !== 'string') {
-      return undefined;
-    }
-
-    const target = name.toLowerCase();
-
-    return Object.keys(this.#readMetadata()).find((key) => key.toLowerCase() === target);
-  }
-
-  /**
-   * Get the value of an entry by key.
-   * @param {string} key
-   * @returns {*}
-   */
-  get(key) {
-    const match = this.#findKey(key);
-
-    return match === undefined ? undefined : this.#readMetadata()[match];
-  }
-
-  /**
-   * Get the full entry by key.
-   * @param {string} key
-   * @returns {object|undefined}
-   */
-  one(key) {
-    const match = this.#findKey(key);
-
-    return match === undefined ? undefined : { key: match, value: this.#readMetadata()[match] };
-  }
-
-  /**
-   * Check whether an entry exists, optionally matching its value too.
-   * @param {string} key
-   * @param {*} [value]
-   * @returns {boolean}
-   */
-  has(key, value) {
-    const match = this.#findKey(key);
-
-    if (match === undefined) {
-      return false;
-    }
-
-    return value === undefined || this.#readMetadata()[match] === value;
-  }
-
-  /**
-   * Get the index of an entry, by key string or by `{ key, value }`.
-   * @param {string|object} item
-   * @returns {number} -1 if not found
-   */
-  indexOf(item) {
-    const match = this.#findKey(typeof item === 'string' ? item : item?.key);
-
-    if (match === undefined) {
-      return -1;
-    }
-
-    const entries = this.all();
-
-    if (typeof item === 'string') {
-      return entries.findIndex((entry) => entry.key === match);
-    }
-
-    return entries.findIndex((entry) => entry.key === match && entry.value === item.value);
-  }
-
-  // ── Iteration overrides (optional context binding) ────────────────────
-
-  /** @param {Function} fn @param {*} [context] */
-  each(fn, context) {
-    super.each(context !== undefined ? fn.bind(context) : fn);
-  }
-
-  /** @param {Function} fn @param {*} [context] @returns {object|undefined} */
-  find(fn, context) {
-    return super.find(context !== undefined ? fn.bind(context) : fn);
-  }
-
-  /** @param {Function} fn @param {*} [context] @returns {Array} */
-  filter(fn, context) {
-    return super.filter(context !== undefined ? fn.bind(context) : fn);
-  }
-
-  /** @param {Function} fn @param {*} [context] @returns {Array} */
-  map(fn, context) {
-    return super.map(context !== undefined ? fn.bind(context) : fn);
-  }
-
-  /** @param {Function} fn @param {*} [accumulator] @param {*} [context] @returns {*} */
-  reduce(fn, ...args) {
-    const bound = args.length > 1 ? fn.bind(args[1]) : fn;
-
-    return args.length ? super.reduce(bound, args[0]) : super.reduce(bound);
   }
 
   // ── Transform override ────────────────────────────────────────────────
@@ -141,7 +49,7 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
       .join('\n');
   }
 
-  // ── Write methods (edit the backing map) ──────────────────────────────
+  // ── Write methods (edit the entries, then project into the headers map) ──
 
   /**
    * Insert a key, or update it in place when it already exists.
@@ -156,16 +64,20 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
       return;
     }
 
-    const metadata = this.#readMetadata();
-    const existing = this.#findKey(key);
-
-    // A server reads `X-Token` and `x-token` as one key, so a re-cased upsert replaces instead of
-    // leaving two entries the transport would send as duplicates.
-    if (existing !== undefined && existing !== key) {
-      delete metadata[existing];
+    const entries = liveHeaderEntries(this.#request);
+    const firstMatch = entries.find((entry) => this._keyMatches(entry.key, key));
+    if (firstMatch && firstMatch.key !== key) {
+      entries.splice(entries.indexOf(firstMatch), 1);
     }
 
-    setMetadataKey(metadata, key, value);
+    const existing = entries.find((entry) => entry.key === key);
+    if (existing) {
+      existing.value = value;
+    } else {
+      entries.push({ key, value });
+    }
+
+    projectHeaderEntries(entries, this.#request.headers);
   }
 
   /**
@@ -191,23 +103,24 @@ class GrpcMetadataList extends ReadOnlyPropertyList {
   remove(key) {
     this.#assertWritable('remove');
 
-    const existing = this.#findKey(key);
-
-    if (existing !== undefined) {
-      delete this.#readMetadata()[existing];
+    const entries = liveHeaderEntries(this.#request);
+    const index = entries.findIndex((entry) => this._keyMatches(entry.key, key));
+    if (index !== -1) {
+      entries.splice(index, 1);
     }
+
+    projectHeaderEntries(entries, this.#request.headers);
   }
 
   /** Remove every entry. */
   clear() {
     this.#assertWritable('clear');
 
-    const metadata = this.#readMetadata();
+    const entries = liveHeaderEntries(this.#request);
 
-    // Emptied in place rather than reassigned
-    for (const key of Object.keys(metadata)) {
-      delete metadata[key];
-    }
+    entries.length = 0;
+
+    projectHeaderEntries(entries, this.#request.headers);
   }
 }
 
