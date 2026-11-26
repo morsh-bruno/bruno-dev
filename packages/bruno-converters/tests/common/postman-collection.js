@@ -94,3 +94,35 @@ export const makeV3Request = (name, overrides = {}) => ({
   headers: [],
   ...overrides
 });
+
+/**
+ * Builds a v3 gRPC request item, shaped like `postman collection get <id> --json` emits one that
+ * has no method selected yet.
+ *
+ * @param {string} name - The request name, also used as the issue path in import warnings.
+ * @param {Object} [overrides] - Fields merged over the request (e.g. `methodPath`, `metadata`, `schema`).
+ * @returns {Object} A request item for {@link makeV3Collection} or {@link makeV3Folder}.
+ */
+export const makeV3GrpcRequest = (name, overrides = {}) => ({
+  name,
+  $kind: 'grpc-request',
+  url: 'grpcb.in:9001',
+  metadata: [],
+  methodPath: '',
+  message: { content: '' },
+  schema: { source: 'none' },
+  scripts: [],
+  settings: {},
+  ...overrides
+});
+
+/**
+ * `methodDescriptor` values Postman exported for hello.HelloService, one per call type, keyed by
+ * the `methodPath` they belong to.
+ */
+export const V3_GRPC_METHOD_DESCRIPTORS = Object.freeze({
+  'hello.HelloService.SayHello': 'CqUBCgtoZWxsby5wcm90bxIFaGVsbG8iJAoMSGVsbG9SZXF1ZXN0EhQKCGdyZWV0aW5nGAEgASgJQgIQACIiCg1IZWxsb1Jlc3BvbnNlEhEKBXJlcGx5GAEgASgJQgIQADJFCgxIZWxsb1NlcnZpY2USNQoIU2F5SGVsbG8SEy5oZWxsby5IZWxsb1JlcXVlc3QaFC5oZWxsby5IZWxsb1Jlc3BvbnNl',
+  'hello.HelloService.LotsOfReplies': 'CqwBCgtoZWxsby5wcm90bxIFaGVsbG8iJAoMSGVsbG9SZXF1ZXN0EhQKCGdyZWV0aW5nGAEgASgJQgIQACIiCg1IZWxsb1Jlc3BvbnNlEhEKBXJlcGx5GAEgASgJQgIQADJMCgxIZWxsb1NlcnZpY2USPAoNTG90c09mUmVwbGllcxITLmhlbGxvLkhlbGxvUmVxdWVzdBoULmhlbGxvLkhlbGxvUmVzcG9uc2UwAQ==',
+  'hello.HelloService.LotsOfGreetings': 'Cq4BCgtoZWxsby5wcm90bxIFaGVsbG8iJAoMSGVsbG9SZXF1ZXN0EhQKCGdyZWV0aW5nGAEgASgJQgIQACIiCg1IZWxsb1Jlc3BvbnNlEhEKBXJlcGx5GAEgASgJQgIQADJOCgxIZWxsb1NlcnZpY2USPgoPTG90c09mR3JlZXRpbmdzEhMuaGVsbG8uSGVsbG9SZXF1ZXN0GhQuaGVsbG8uSGVsbG9SZXNwb25zZSgB',
+  'hello.HelloService.BidiHello': 'CqoBCgtoZWxsby5wcm90bxIFaGVsbG8iJAoMSGVsbG9SZXF1ZXN0EhQKCGdyZWV0aW5nGAEgASgJQgIQACIiCg1IZWxsb1Jlc3BvbnNlEhEKBXJlcGx5GAEgASgJQgIQADJKCgxIZWxsb1NlcnZpY2USOgoJQmlkaUhlbGxvEhMuaGVsbG8uSGVsbG9SZXF1ZXN0GhQuaGVsbG8uSGVsbG9SZXNwb25zZSgBMAE='
+});

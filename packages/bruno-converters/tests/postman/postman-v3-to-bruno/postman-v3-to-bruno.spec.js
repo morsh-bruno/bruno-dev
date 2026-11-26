@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import postmanToBruno from '../../../src/postman/postman-to-bruno';
 import { isPostmanV3Collection } from '../../../src/postman/postman-v3-to-bruno';
-import { makeV3Collection, makeV3Folder, makeV3Request } from '../../common/postman-collection';
+import { makeV3Collection, makeV3Folder, makeV3GrpcRequest, makeV3Request, V3_GRPC_METHOD_DESCRIPTORS } from '../../common/postman-collection';
 
 const basicAuth = (username) => ({
   type: 'basic',
@@ -389,8 +389,190 @@ describe('postmanToBruno with a v3 collection', () => {
     expect(collection.items[1].items[0].request.url).toBe('https://example.com/lower');
   });
 
+  describe('gRPC requests', () => {
+    it('imports a request with a method picked from a proto file', async () => {
+      const { collection, issues } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Say Hello', {
+          description: 'Greets the caller',
+          url: '{{host}}',
+          methodPath: 'hello.HelloService.SayHello',
+          methodDescriptor: V3_GRPC_METHOD_DESCRIPTORS['hello.HelloService.SayHello'],
+          message: { content: '{"greeting": "{{greeting}}"}' },
+          schema: { source: 'file', location: '/protos/hello.proto' }
+        })
+      ]));
+
+      expect(issues).toEqual([]);
+      expect(collection.items[0]).toMatchObject({
+        type: 'grpc-request',
+        name: 'Say Hello',
+        filename: 'Say Hello',
+        seq: 1,
+        request: {
+          url: '{{host}}',
+          method: '/hello.HelloService/SayHello',
+          methodType: 'unary',
+          protoPath: '/protos/hello.proto',
+          headers: [],
+          auth: { mode: 'inherit' },
+          body: { mode: 'grpc', grpc: [{ name: 'message 1', content: '{"greeting": "{{greeting}}"}' }] },
+          docs: 'Greets the caller'
+        }
+      });
+    });
+
+    it.each([
+      ['hello.HelloService.LotsOfReplies', 'server-streaming'],
+      ['hello.HelloService.LotsOfGreetings', 'client-streaming'],
+      ['hello.HelloService.BidiHello', 'bidi-streaming']
+    ])('reads the method type of %s from its descriptor and leaves the proto path empty for reflection', async (methodPath, methodType) => {
+      const { collection } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Streaming', {
+          methodPath,
+          methodDescriptor: V3_GRPC_METHOD_DESCRIPTORS[methodPath],
+          schema: { source: 'auto' }
+        })
+      ]));
+
+      expect(collection.items[0].request).toMatchObject({ methodType, protoPath: null });
+    });
+
+    it('imports a request without a method, descriptor or message', async () => {
+      const { collection, issues } = await postmanToBruno(makeV3Collection([makeV3GrpcRequest('Empty')]));
+
+      expect(issues).toEqual([]);
+      expect(collection.items[0].request).toMatchObject({
+        url: 'grpcb.in:9001',
+        method: '',
+        methodType: '',
+        protoPath: null,
+        body: { mode: 'grpc', grpc: [{ name: 'message 1', content: '{}' }] }
+      });
+    });
+
+    it('leaves the method type empty when the descriptor cannot be read', async () => {
+      const { collection, issues } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Broken Descriptor', { methodPath: 'hello.HelloService.SayHello', methodDescriptor: 'not base64!' })
+      ]));
+
+      expect(issues).toEqual([]);
+      expect(collection.items[0].request).toMatchObject({ method: '/hello.HelloService/SayHello', methodType: '' });
+    });
+
+    it('maps metadata to headers', async () => {
+      const { collection } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Metadata', {
+          metadata: [
+            { key: 'x-trace', value: 'abc', disabled: false, description: 'trace id' },
+            { key: 'x-off', value: '1', disabled: true, description: '' },
+            { key: 'blob-bin', value: 'aGVsbG8=', disabled: false, description: '' }
+          ]
+        })
+      ]));
+
+      expect(collection.items[0].request.headers).toMatchObject([
+        { name: 'x-trace', value: 'abc', description: 'trace id', enabled: true },
+        { name: 'x-off', value: '1', enabled: false },
+        { name: 'blob-bin', value: 'aGVsbG8=', enabled: true }
+      ]);
+    });
+
+    it('maps request auth and inherits when there is none', async () => {
+      const { collection } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Api Key', {
+          auth: { type: 'apikey', credentials: [{ key: 'key', value: 'x-api-key' }, { key: 'value', value: 'secret' }] }
+        }),
+        makeV3GrpcRequest('No Auth', { auth: { type: 'noauth' } }),
+        makeV3GrpcRequest('Inherit')
+      ]));
+
+      const [apiKey, noAuth, inherit] = collection.items.map((item) => item.request.auth);
+      expect(apiKey).toMatchObject({ mode: 'apikey', apikey: { key: 'x-api-key', value: 'secret', placement: 'header' } });
+      expect(noAuth.mode).toBe('none');
+      expect(inherit.mode).toBe('inherit');
+    });
+
+    it('imports request scripts verbatim into the matching hooks', async () => {
+      const beforeInvoke = 'pm.request.metadata.add({ key: \'x-script\', value: \'1\' });';
+      const afterResponse = 'pm.test(\'status OK\', () => pm.response.to.have.statusCode(0));';
+
+      const { collection, issues } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Scripts', {
+          scripts: [
+            { type: 'beforeInvoke', code: beforeInvoke, language: 'text/javascript' },
+            { type: 'onIncomingMessage', code: 'console.log(\'message received\');', language: 'text/javascript' },
+            { type: 'afterResponse', code: afterResponse, language: 'text/javascript' }
+          ]
+        })
+      ]));
+
+      expect(issues).toEqual([]);
+      expect(collection.items[0].request.script).toEqual({
+        beforeCallStart: beforeInvoke,
+        afterMessageReceive: 'console.log(\'message received\');',
+        afterCallEnd: afterResponse
+      });
+    });
+
+    it('reports a request script type it cannot place', async () => {
+      const { collection, issues } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Odd Script', { scripts: [{ type: 'beforeRequest', code: 'console.log(1)' }] })
+      ]));
+
+      expect(collection.items[0].request.script).toEqual({});
+      expect(issues).toEqual([{ path: 'Odd Script', severity: 'warning', message: 'Unsupported script type "beforeRequest", not imported' }]);
+    });
+
+    it('drops collection and folder gRPC scripts and reports them', async () => {
+      const { collection, issues } = await postmanToBruno(makeV3Collection([
+        makeV3Folder('Folder', [makeV3GrpcRequest('Call')], {
+          scripts: [{ type: 'grpc:beforeInvoke', code: 'console.log("folder before invoke");' }]
+        })
+      ], {
+        scripts: [{ type: 'grpc:afterResponse', code: 'console.log("collection after response");' }]
+      }));
+
+      expect(collection.root.request.script).toEqual({});
+      expect(collection.items[0].root.request.script).toEqual({});
+      expect(collection.items[0].items[0].request.script).toEqual({});
+      expect(issues).toEqual([
+        { path: 'Collection', severity: 'warning', message: 'Unsupported script type "grpc:afterResponse", not imported' },
+        { path: 'Folder', severity: 'warning', message: 'Unsupported script type "grpc:beforeInvoke", not imported' }
+      ]);
+    });
+
+    it('drops settings and saved examples without reporting them', async () => {
+      const { collection, issues } = await postmanToBruno(makeV3Collection([
+        makeV3GrpcRequest('Settings', {
+          settings: { secureConnection: true, strictSSL: true, connectionTimeout: 2000, includeDefaultFields: false, maxResponseMessageSize: 11 },
+          examples: [{
+            $kind: 'grpc-example',
+            name: 'Saved',
+            request: { url: '{{host}}', methodPath: '', message: { content: '' }, metadata: [] },
+            response: { code: 0, metadata: [], trailers: [], messages: [{ id: 'm1', type: 'incoming', content: '{}' }] }
+          }]
+        })
+      ]));
+
+      expect(issues).toEqual([]);
+      expect(collection.items[0].examples).toBeUndefined();
+    });
+
+    it('shares the filename namespace and sequence with HTTP requests', async () => {
+      const { collection } = await postmanToBruno(makeV3Collection([
+        makeV3Request('Same'),
+        makeV3GrpcRequest('Same')
+      ]));
+
+      expect(collection.items.map((item) => [item.type, item.filename, item.seq])).toEqual([
+        ['http-request', 'Same', 1],
+        ['grpc-request', 'Same_1', 2]
+      ]);
+    });
+  });
+
   it('skips unsupported and malformed items and imports the rest', async () => {
-    const grpcItem = { $kind: 'grpc-request', name: 'Greeter', url: 'localhost:50051' };
+    const websocketItem = { $kind: 'websocket-request', name: 'Socket', url: 'wss://example.com' };
     const graphqlItem = {
       $kind: 'graphql-request',
       name: 'Get User',
@@ -401,14 +583,14 @@ describe('postmanToBruno with a v3 collection', () => {
 
     const { collection, issues } = await postmanToBruno(makeV3Collection([
       makeV3Request('Valid'),
-      grpcItem,
+      websocketItem,
       graphqlItem,
       null
     ]));
 
     expect(collection.items.map((item) => item.name)).toEqual(['Valid']);
     expect(issues).toEqual([
-      { path: 'Greeter', severity: 'error', message: 'Unsupported item type "grpc-request", not imported', sourceItem: grpcItem },
+      { path: 'Socket', severity: 'error', message: 'Unsupported item type "websocket-request", not imported', sourceItem: websocketItem },
       { path: 'Get User', severity: 'error', message: 'Unsupported item type "graphql-request", not imported', sourceItem: graphqlItem },
       { path: 'Item 4', severity: 'error', message: 'Malformed collection item (not an object)' }
     ]);

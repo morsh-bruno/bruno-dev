@@ -3,6 +3,7 @@ import { extractPackagesFromScript } from './postman-package-detector';
 import { emptyAuth, isSupportedAuthType, toBrunoAuth } from './helpers/auth';
 import { emptyBody, toBrunoFileBody, toBrunoFormUrlEncodedBody, toBrunoMultipartBody, toBrunoRawBody } from './helpers/body';
 import { getResponseBodyType, toExampleName } from './helpers/examples';
+import { readGrpcMethodType, toBrunoGrpcMethod } from './helpers/grpc';
 import { toBrunoHeaders, toBrunoPathParams, toBrunoQueryParams } from './helpers/key-values';
 import { createScriptTranslator, toWorkerEvents, translateScriptsInWorkers } from './helpers/scripts';
 import { toBrunoRequestSettings } from './helpers/settings';
@@ -11,18 +12,28 @@ import { createUniqueNamer, ensureString, stripUrlFragment, toKeyValueObject, tr
 
 const ITEM_KINDS = Object.freeze({
   FOLDER: 'collection',
-  HTTP: 'http-request'
+  HTTP: 'http-request',
+  GRPC: 'grpc-request'
 });
 
 const RAW_BODY_TYPES = new Set(['json', 'xml', 'text', 'html', 'javascript']);
 
 // Collection and folder scripts carry a protocol prefix (`http:beforeRequest`); request scripts do not.
-const SCRIPT_PHASES = {
+const HTTP_SCRIPT_PHASES = {
   'beforeRequest': 'req',
   'http:beforeRequest': 'req',
   'afterResponse': 'res',
   'http:afterResponse': 'res'
 };
+
+// Bruno runs gRPC hooks on the request only, so the `grpc:`-prefixed collection and folder types have no target.
+const GRPC_SCRIPT_PHASES = {
+  beforeInvoke: 'beforeCallStart',
+  onIncomingMessage: 'afterMessageReceive',
+  afterResponse: 'afterCallEnd'
+};
+
+const DEFAULT_GRPC_MESSAGE = '{}';
 
 export const isPostmanV3Collection = (collection) => {
   return collection?.$kind === ITEM_KINDS.FOLDER && Array.isArray(collection.items);
@@ -47,24 +58,23 @@ const importAuth = (auth, defaultMode, { issues, path }) => {
   return toBrunoAuth(postmanAuth.type, postmanAuth.values);
 };
 
-const readScripts = (scripts, { issues, path }) => {
-  const sources = { req: [], res: [] };
+// Returns the script source per Bruno phase, e.g. `{ req, res }`; a phase without a script is left out.
+const readScripts = (scripts, phases, { issues, path }) => {
+  const sources = {};
 
   (Array.isArray(scripts) ? scripts : []).forEach((script) => {
     if (!script || typeof script.code !== 'string' || !script.code.trim()) return;
 
-    const phase = SCRIPT_PHASES[script.type];
-    if (!phase) {
+    if (!Object.hasOwn(phases, script.type)) {
       issues.push({ path, severity: 'warning', message: `Unsupported script type "${script.type}", not imported` });
       return;
     }
-    sources[phase].push(script.code);
+
+    const phase = phases[script.type];
+    sources[phase] = sources[phase] ? `${sources[phase]}\n${script.code}` : script.code;
   });
 
-  return {
-    req: sources.req.join('\n'),
-    res: sources.res.join('\n')
-  };
+  return sources;
 };
 
 const toBrunoBody = (body, { issues, path }) => {
@@ -134,7 +144,7 @@ const createImporter = ({ preserveScripts, logTranslationFailures, scriptMap }) 
   const translate = createScriptTranslator({ preserveScripts, logTranslationFailures, issues, scriptUsages });
 
   const importScripts = (scripts, brunoUid, request, path) => {
-    const { req, res } = readScripts(scripts, { issues, path });
+    const { req, res } = readScripts(scripts, HTTP_SCRIPT_PHASES, { issues, path });
     if (!req && !res) return;
 
     if (scriptMap) {
@@ -180,6 +190,37 @@ const createImporter = ({ preserveScripts, logTranslationFailures, scriptMap }) 
     }
 
     return brunoItem;
+  };
+
+  // gRPC scripts are imported as written: the pm.* translation only knows Postman's HTTP sandbox.
+  const importGrpcRequest = (item, { name, filename, seq, path }) => {
+    const schema = item.schema && typeof item.schema === 'object' ? item.schema : {};
+    const message = ensureString(item.message?.content);
+
+    return {
+      uid: uuid(),
+      name,
+      filename,
+      type: 'grpc-request',
+      seq,
+      request: {
+        url: ensureString(item.url),
+        method: toBrunoGrpcMethod(item.methodPath),
+        methodType: readGrpcMethodType(item.methodDescriptor, item.methodPath),
+        protoPath: schema.source === 'file' ? ensureString(schema.location, null) : null,
+        headers: toBrunoHeaders(item.metadata),
+        auth: importAuth(item.auth, 'inherit', { issues, path }),
+        body: {
+          mode: 'grpc',
+          grpc: [{ name: 'message 1', content: message.trim() ? message : DEFAULT_GRPC_MESSAGE }]
+        },
+        script: readScripts(item.scripts, GRPC_SCRIPT_PHASES, { issues, path }),
+        vars: { req: [], res: [] },
+        assertions: [],
+        tests: '',
+        docs: transformDescription(item.description)
+      }
+    };
   };
 
   const importFolder = (item, { name, filename, seq, path }) => {
@@ -232,6 +273,9 @@ const createImporter = ({ preserveScripts, logTranslationFailures, scriptMap }) 
         } else if (item.$kind === ITEM_KINDS.HTTP) {
           const name = item.name || 'Untitled Request';
           brunoItems.push(importRequest(item, { name, filename: nameRequest(name), seq, path }));
+        } else if (item.$kind === ITEM_KINDS.GRPC) {
+          const name = item.name || 'Untitled Request';
+          brunoItems.push(importGrpcRequest(item, { name, filename: nameRequest(name), seq, path }));
         } else {
           issues.push({ path, severity: 'error', message: `Unsupported item type "${item.$kind}", not imported`, sourceItem: item });
         }
@@ -254,7 +298,7 @@ const createImporter = ({ preserveScripts, logTranslationFailures, scriptMap }) 
     };
 
     // Collection scripts are always translated inline; the worker only handles folders and requests.
-    const { req, res } = readScripts(collection.scripts, { issues, path });
+    const { req, res } = readScripts(collection.scripts, HTTP_SCRIPT_PHASES, { issues, path });
     if (req) request.script.req = translate(req, path);
     if (res) request.script.res = translate(res, path);
 
